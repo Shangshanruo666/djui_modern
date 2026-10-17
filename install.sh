@@ -15,6 +15,8 @@
 #      sh install.sh --no-submodule  # 不碰 git，只应用补丁（模块已就位时用）
 #      sh install.sh --revert        # 反向应用补丁（撤销对原版文件的改动）
 #      sh install.sh --dry-run       # 只检查能否应用，不写文件
+#      sh install.sh <分支>          # 指定模块分支
+#      curl -LSs <install.sh 链接> | bash -s <分支>
 #
 #  Android 分支请改用 install-android.sh（它多做的是 Android 专属检查，
 #  并提示配置文件位置：Android 上 djui_modern.cfg 与 dynos/、mods/ 同级）。
@@ -29,6 +31,7 @@ DEFAULT_URL="https://github.com/Shangshanruo666/djui_modern.git"
 # ── 解析参数 ────────────────────────────────────────────────────────────────
 ROOT=""
 URL=""
+MODULE_REF=""
 USE_SUBMODULE=1
 DRY_RUN=0
 REVERT=0
@@ -45,9 +48,13 @@ while [ $# -gt 0 ]; do
         -h|--help)
             sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
-        *)
+        -*)
             echo "未知参数: $1（用 --help 看用法）" >&2
             exit 2 ;;
+        *)
+            [ -z "$MODULE_REF" ] || { echo "未知参数: $1" >&2; exit 2; }
+            MODULE_REF="$1"
+            shift ;;
     esac
 done
 
@@ -62,6 +69,10 @@ die()  { err "$*"; exit 1; }
 
 # 脚本自身所在目录（本模块的根目录）
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+MODULE_SOURCE_DIR=""
+if [ -f "$SCRIPT_DIR/install.sh" ] && [ -d "$SCRIPT_DIR/patches" ]; then
+    MODULE_SOURCE_DIR="$SCRIPT_DIR"
+fi
 
 # ── 1. 定位源码树根目录 ─────────────────────────────────────────────────────
 looks_like_sm64coopdx() {
@@ -116,7 +127,7 @@ else
 fi
 
 MODULE_DIR="$ROOT/src/pc/djui_modern"
-PATCH_DIR="$SCRIPT_DIR/patches"
+PATCH_DIR=""
 
 # git / patch 的可用性（早于子模块步骤就要知道）
 # 用 `git --version` 真跑一次：PATH 里可能存在"存在但不可用"的 git。
@@ -133,10 +144,10 @@ if [ "$USE_SUBMODULE" = "0" ]; then
 elif [ -d "$MODULE_DIR" ]; then
     info "模块目录已存在，跳过子模块挂载: src/pc/djui_modern"
 else
-    if [ -z "$URL" ]; then
+    if [ -z "$URL" ] && [ -n "$MODULE_SOURCE_DIR" ]; then
         # 优先用本模块自己克隆里的 origin
-        if [ "$HAVE_GIT" = "1" ] && git -C "$SCRIPT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
-            URL=$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null || true)
+        if [ "$HAVE_GIT" = "1" ] && git -C "$MODULE_SOURCE_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+            URL=$(git -C "$MODULE_SOURCE_DIR" remote get-url origin 2>/dev/null || true)
         fi
     fi
     [ -n "$URL" ] || URL="$DEFAULT_URL"
@@ -149,12 +160,21 @@ else
         warn "请手动把模块放到 src/pc/djui_modern，然后加 --no-submodule 重跑。"
         exit 1
     fi
-    info "git submodule add $URL src/pc/djui_modern"
+    if [ -n "$MODULE_REF" ]; then
+        info "git submodule add -b $MODULE_REF $URL src/pc/djui_modern"
+    else
+        info "git submodule add $URL src/pc/djui_modern"
+    fi
     if [ "$DRY_RUN" = "1" ]; then
         info "（--dry-run：不实际执行）"
     else
-        ( cd "$ROOT" && git submodule add "$URL" src/pc/djui_modern ) ||
-            die "子模块挂载失败（仓库地址是否正确？可用 --url 指定）"
+        if [ -n "$MODULE_REF" ]; then
+            ( cd "$ROOT" && git submodule add -b "$MODULE_REF" "$URL" src/pc/djui_modern ) ||
+                die "子模块挂载失败（分支或仓库地址是否正确？）"
+        else
+            ( cd "$ROOT" && git submodule add "$URL" src/pc/djui_modern ) ||
+                die "子模块挂载失败（仓库地址是否正确？可用 --url 指定）"
+        fi
         ok "子模块已挂到 src/pc/djui_modern"
     fi
 fi
@@ -162,6 +182,8 @@ fi
 say ""
 say "-- 步骤 2/3: 应用原版文件补丁 --"
 
+SCRIPT_DIR="$MODULE_DIR"
+PATCH_DIR="$MODULE_DIR/patches"
 [ -d "$PATCH_DIR" ] || die "找不到补丁目录: $PATCH_DIR"
 [ -d "$MODULE_DIR" ] || die "模块目录不存在: $MODULE_DIR"
 
