@@ -12,7 +12,7 @@
 #include "engine/math_util.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include <stb/stb_truetype.h>
+#include "stb_truetype.h"
 
 /* stb_image 实现已由 gfx_pc.c 提供。 */
 #include <stb/stb_image.h>

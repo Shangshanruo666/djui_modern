@@ -1005,6 +1005,7 @@ src/pc/djui_modern/
 ├── djui_modern_config.h/.c   配置读取（缺失时自动生成；版本更新时自动补全缺失项）
 ├── djui_modern_rrect.h/.c    圆角矩形原语（遮罩生成 + 九宫格 + 顶点池）
 ├── djui_modern_gbi.h         与 N64 无关的 GBI 辅助宏
+├── stb_truetype.h            模块自带的字体光栅化头文件（stb v1.26）
 ├── djui_modern_font.h/.c     把 TTF 接进 gDjuiFonts[]（度量标定：西文只补一半、CJK 不标定）
 ├── djui_modern_font_atlas.h/.c  字形光栅化 + 每字形一张不可变纹理（按需光栅、字偶间距）
 ├── djui_modern_font_latin_data.h  内嵌**西文**字体（Roboto Condensed 子集，16KB）
