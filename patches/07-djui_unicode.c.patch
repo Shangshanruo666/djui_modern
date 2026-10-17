@@ -1,0 +1,33 @@
+diff --git a/src/pc/djui/djui_unicode.c b/src/pc/djui/djui_unicode.c
+--- a/src/pc/djui/djui_unicode.c
++++ b/src/pc/djui/djui_unicode.c
+@@ -375,10 +375,29 @@ size_t djui_unicode_len(char* text) {
+     return len;
+ }
+ 
++/*
++ * djui_modern 未参与编译时的空兜底（见 djui_modern_font_atlas.h 的说明）。
++ * djui_modern 存在时，它自己的强符号会在链接期覆盖本定义。
++ *
++ * 用途：原版只认"点阵字形表 sCharMap 里有的字"，所以**输入框无法输入
++ * 现代 emoji（模块新收的那批）与国旗（Regional Indicator）** ——
++ * 它们会被 djui_unicode_valid_char() 判为非法字符直接丢掉
++ * （真机表现：`win + .` 输入或粘贴 emoji/国旗都进不去输入框）。
++ * 模块侧接管这个判定，把自己能渲染的字符一并放行。
++ */
++#if defined(__GNUC__)
++__attribute__((weak))
++#endif
++bool djui_modern_unicode_accepts(const char* text) { (void)text; return false; }
++
+ bool djui_unicode_valid_char(const char* text) {
+     if ((u8)*text < 128) {
+         return ((u8)*text >= ' ');
+     }
++    // djui_modern 能渲染的字符（现代 emoji / 国旗）也算合法
++    if (djui_modern_unicode_accepts(text)) {
++        return true;
++    }
+     u64 key = convert_unicode_char_to_u64(text);
+     struct SmCodeGlyph* glyph = hmap_get(sCharMap, key);
+     return glyph != NULL;

@@ -1,0 +1,31 @@
+diff --git a/src/pc/djui/djui_text.c b/src/pc/djui/djui_text.c
+--- a/src/pc/djui/djui_text.c
++++ b/src/pc/djui/djui_text.c
+@@ -534,6 +534,18 @@ static void djui_text_destroy(struct DjuiBase* base) {
+     free(text);
+ }
+ 
++/*
++ * djui_modern 未参与编译时的空兜底（见 djui_text.h 的说明）。
++ * djui_modern 存在时，它自己的强符号会在链接期覆盖本定义。
++ *
++ * 有些面板（玩家列表 / mod 列表 / mod 描述）的文字要按配置决定用矢量字体
++ * 还是原版点阵字体 —— 模块在每次创建文字节点时据此调整 `text->font`。
++ */
++#if defined(__GNUC__)
++__attribute__((weak))
++#endif
++void djui_modern_note_text_created(struct DjuiText* text) { (void)text; }
++
+ struct DjuiText* djui_text_create(struct DjuiBase* parent, const char* message) {
+     struct DjuiText* text = calloc(1, sizeof(struct DjuiText));
+     struct DjuiBase* base = &text->base;
+@@ -547,5 +559,8 @@ struct DjuiText* djui_text_create(struct DjuiBase* parent, const char* message)
+     djui_text_set_alignment(text, DJUI_HALIGN_LEFT, DJUI_VALIGN_TOP);
+     djui_text_set_drop_shadow(text, 0, 0, 0, 0);
+ 
++    // 上报给 djui_modern：它按配置决定这个文字节点该用矢量字体还是原版字体
++    djui_modern_note_text_created(text);
++
+     return text;
+ }

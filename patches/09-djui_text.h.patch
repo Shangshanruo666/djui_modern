@@ -1,0 +1,20 @@
+diff --git a/src/pc/djui/djui_text.h b/src/pc/djui/djui_text.h
+--- a/src/pc/djui/djui_text.h
++++ b/src/pc/djui/djui_text.h
+@@ -27,3 +27,16 @@ int djui_text_count_lines(struct DjuiText* text, u16 maxLines);
+ f32 djui_text_find_width(struct DjuiText* text, u16 maxLines);
+ 
+ struct DjuiText* djui_text_create(struct DjuiBase* parent, const char* message);
++
++/*
++ * djui_modern 未参与编译时的空兜底（见 djui_modern_font.h 的"字体槽查询"）。
++ * djui_modern 存在时，它自己的强符号会在链接期覆盖本定义。
++ *
++ * 用途：有些面板（玩家列表 / mod 列表 / mod 描述）的文字需要按配置决定用
++ * 矢量字体还是原版点阵字体。模块在**每次创建文字节点时**据此把 `text->font`
++ * 指向正确的字体 —— 只在"该文字确实属于这些面板"时才动手。
++ * 模块缺席时是空实现，行为与改动前逐字节一致。
++ *
++ * ⚠ 声明处**绝不能加 weak**（weak 会传染，把模块的强定义也降级 ⇒ 静默失效）。
++ */
++void djui_modern_note_text_created(struct DjuiText* text);

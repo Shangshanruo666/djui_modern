@@ -1,0 +1,12 @@
+diff --git a/src/pc/djui/djui_panel_host.c b/src/pc/djui/djui_panel_host.c
+--- a/src/pc/djui/djui_panel_host.c
++++ b/src/pc/djui/djui_panel_host.c
+@@ -143,6 +143,8 @@ void djui_panel_host_create(struct DjuiBase* caller) {
+                 djui_base_set_color(&text1->base, 220, 220, 220, 255);
+                 djui_base_set_size(&text1->base, 0.585f, 64);
+                 djui_base_set_alignment(&text1->base, DJUI_HALIGN_LEFT, DJUI_VALIGN_TOP);
++                // 原版此处漏了投影（同面板的 PORT / 存档槽位 两个标签都有），补上以保持一致
++                djui_text_set_drop_shadow(text1, 64, 64, 64, 100);
+                 if (gNetworkType == NT_SERVER) {
+                     djui_base_set_enabled(&text1->base, false);
+                 }

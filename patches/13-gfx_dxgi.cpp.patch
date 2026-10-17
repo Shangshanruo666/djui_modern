@@ -1,0 +1,83 @@
+diff --git a/src/pc/gfx/gfx_dxgi.cpp b/src/pc/gfx/gfx_dxgi.cpp
+--- a/src/pc/gfx/gfx_dxgi.cpp
++++ b/src/pc/gfx/gfx_dxgi.cpp
+@@ -253,26 +253,63 @@ static void gfx_dxgi_on_key_up(WPARAM w_param, LPARAM l_param) {
+     if (dxgi.on_key_up != nullptr) { dxgi.on_key_up(key); }
+ }
+ 
++/*
++ * 把 WM_CHAR 送来的 UTF-16 code unit 转成 UTF-8 交给上层。
++ *
++ * ⚠ **必须支持代理对（surrogate pair）**。
++ *   Windows 从 Vista 起用 UTF-16 代理对发送**非 BMP 字符**，而
++ *   **所有 emoji 都在 U+1F000 以上**（含国旗的 Regional Indicator
++ *   U+1F1E6..U+1F1FF）⇒ 打字/输入法联想/`win + .` 送来的 emoji 必然是
++ *   先高位代理、再低位代理两条 WM_CHAR。
++ *   原版这里把两个代理**都直接丢弃**，于是"所有 emoji 都打不出来，
++ *   但中文（BMP）可以" —— 粘贴能进是因为走的是剪贴板，不经过这条路径。
++ *
++ * 这里把代理对拼回一个码点，再按 4 字节 UTF-8 送出。
++ */
+ static void gfx_dxgi_on_text_input(wchar_t code_unit) {
+-    if (inTextInput && (!IS_HIGH_SURROGATE(code_unit)) && (!IS_LOW_SURROGATE(code_unit))) {
+-        char utf8_buffer[3 + 1];
+-        if (code_unit >= 0x0800) { // 3-byte encoding
+-            utf8_buffer[0] = 0xe0 | ((code_unit >> 12) & 0x0f);
+-            utf8_buffer[1] = 0x80 | ((code_unit >>  6) & 0x3f);
+-            utf8_buffer[2] = 0x80 | (code_unit         & 0x3f);
+-            utf8_buffer[3] = '\0';
+-        } else if (code_unit >= 0x0080) { // 2-byte encoding
+-            utf8_buffer[0] = 0xc0 | ((code_unit >> 6) & 0x1f);
+-            utf8_buffer[1] = 0x80 | (code_unit        & 0x3f);
+-            utf8_buffer[2] = '\0';
+-        } else { // 1-byte encoding
+-            if (code_unit < ' ') { return; } // skipping control chars
+-            utf8_buffer[0] = (char)code_unit;
+-            utf8_buffer[1] = '\0';
+-        }
++    if (!inTextInput) { return; }
++
++    static wchar_t sPendingHighSurrogate = 0;
+ 
++    if (IS_HIGH_SURROGATE(code_unit)) {
++        sPendingHighSurrogate = code_unit;   // 暂存，等低位代理
++        return;
++    }
++    if (IS_LOW_SURROGATE(code_unit)) {
++        if (sPendingHighSurrogate == 0) { return; }   // 悬空的低位代理：丢弃
++        const unsigned int cp = 0x10000u
++                              + (((unsigned int)sPendingHighSurrogate - 0xD800u) << 10)
++                              +  ((unsigned int)code_unit             - 0xDC00u);
++        sPendingHighSurrogate = 0;
++        char utf8_buffer[4 + 1];
++        utf8_buffer[0] = (char)(0xf0 | ((cp >> 18) & 0x07));
++        utf8_buffer[1] = (char)(0x80 | ((cp >> 12) & 0x3f));
++        utf8_buffer[2] = (char)(0x80 | ((cp >>  6) & 0x3f));
++        utf8_buffer[3] = (char)(0x80 | ( cp        & 0x3f));
++        utf8_buffer[4] = '\0';
+         dxgi.on_text_input(utf8_buffer);
++        return;
++    }
++
++    sPendingHighSurrogate = 0;   // 普通字符：清掉可能悬空的高位代理
++
++    char utf8_buffer[3 + 1];
++    if (code_unit >= 0x0800) { // 3-byte encoding
++        utf8_buffer[0] = 0xe0 | ((code_unit >> 12) & 0x0f);
++        utf8_buffer[1] = 0x80 | ((code_unit >>  6) & 0x3f);
++        utf8_buffer[2] = 0x80 | (code_unit         & 0x3f);
++        utf8_buffer[3] = '\0';
++    } else if (code_unit >= 0x0080) { // 2-byte encoding
++        utf8_buffer[0] = 0xc0 | ((code_unit >> 6) & 0x1f);
++        utf8_buffer[1] = 0x80 | (code_unit        & 0x3f);
++        utf8_buffer[2] = '\0';
++    } else { // 1-byte encoding
++        if (code_unit < ' ') { return; } // skipping control chars
++        utf8_buffer[0] = (char)code_unit;
++        utf8_buffer[1] = '\0';
+     }
++
++    dxgi.on_text_input(utf8_buffer);
+ }
+ 
+ static void gfx_dxgi_on_scroll(WPARAM w_param) {

@@ -1,0 +1,27 @@
+diff --git a/src/pc/djui/djui_gfx.h b/src/pc/djui/djui_gfx.h
+--- a/src/pc/djui/djui_gfx.h
++++ b/src/pc/djui/djui_gfx.h
+@@ -33,5 +33,22 @@ void djui_gfx_position_translate(f32* x, f32* y);
+ void djui_gfx_scale_translate(f32* width, f32* height);
+ void djui_gfx_size_translate(f32* size);
+ 
++/*
++ * djui_modern 字体模块的"字号记录点"。
++ *
++ * djui_gfx_size_translate() 是全工程唯一的文字字号转换函数（仅 3 个调用者，
++ * 全部是文字：djui_text / djui_inputbox / djui_hud_utils），它在每次换算后
++ * 调用本函数，把结果字号交给现代化字体后端。
++ *
++ * 它是**弱符号**：定义侧（djui_gfx.c 里的空兜底）带
++ * `__attribute__((weak))`，djui_modern 存在时其强定义在链接期覆盖它。
++ *
++ * ⚠ 这里**故意不加** weak 属性。属性若出现在声明上，会随 `djui.h` 传播到
++ *   所有包含它的 TU，把 djui_modern 侧本该是强符号的定义也**传染成 weak**，
++ *   导致链接器在两个 weak 中任选一个（实测会选中原版空实现）→ 字号永远为 0
++ *   → 字体后端拿到的是"未知字号"→ 字形按兜底档光栅化。
++ */
++void djui_modern_note_font_size(f32 size);
++
+ bool djui_gfx_add_clipping_specific(struct DjuiBase* base, f32 dX, f32 dY, f32 dW, f32 dH);
+ bool djui_gfx_add_clipping(struct DjuiBase* base);
+\ No newline at end of file
