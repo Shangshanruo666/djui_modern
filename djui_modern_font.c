@@ -268,6 +268,9 @@ static bool install_slot(s32 slot) {
 void djui_modern_font_install(void) {
     if (sInstalled) { return; }
     sInstalled = true;
+    Printf("djui_modern: font install enabled=%d slots=%u\n",
+           (int)gDjuiModernConfig.fontEnabled,
+           gDjuiModernConfig.fontSlotCount);
 
     if (!gDjuiModernConfig.fontEnabled) {
         LOG_INFO("djui_modern: TTF fonts disabled by config");

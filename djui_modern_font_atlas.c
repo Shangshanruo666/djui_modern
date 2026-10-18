@@ -21,10 +21,13 @@
  * 内嵌字体、Emoji 与国旗数据。
  * Emoji 和国旗使用两张布局相同的 512x512 图集。
  */
-#include "djui_modern_font_latin_data.h"
-#include "djui_modern_font_cjk_data.h"
-
 #if defined(__has_include)
+#  if __has_include("djui_modern_font_latin_data.h")
+#    include "djui_modern_font_latin_data.h"
+#  endif
+#  if __has_include("djui_modern_font_cjk_data.h")
+#    include "djui_modern_font_cjk_data.h"
+#  endif
 #  if __has_include("djui_modern_emoji_data.h")
 #    include "djui_modern_emoji_data.h"
 #  endif
@@ -635,6 +638,7 @@ static bool font_face_setup(FontFace* face, u8* data, u32 size, bool own, const 
 
     const int offset = stbtt_GetFontOffsetForIndex(data, 0);
     if (offset < 0 || !stbtt_InitFont(&face->info, data, offset)) {
+        Printf("djui_modern: font face failed: %s\n", name);
         if (own) { free(data); }
         return false;
     }
@@ -792,6 +796,7 @@ bool djui_modern_font_atlas_init(void) {
     if (sReady) { return true; }
 
     font_load_chain();
+    Printf("djui_modern: font faces=%d\n", sFaceCount);
     if (sFaceCount == 0) {
         LOG_ERROR("djui_modern: no usable TTF/OTF font found, keeping bitmap fonts");
         return false;
