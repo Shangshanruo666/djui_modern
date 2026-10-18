@@ -21,13 +21,10 @@
  * 内嵌字体、Emoji 与国旗数据。
  * Emoji 和国旗使用两张布局相同的 512x512 图集。
  */
+#include "djui_modern_font_latin_data.h"
+#include "djui_modern_font_cjk_data.h"
+
 #if defined(__has_include)
-#  if __has_include("djui_modern_font_latin_data.h")
-#    include "djui_modern_font_latin_data.h"
-#  endif
-#  if __has_include("djui_modern_font_cjk_data.h")
-#    include "djui_modern_font_cjk_data.h"
-#  endif
 #  if __has_include("djui_modern_emoji_data.h")
 #    include "djui_modern_emoji_data.h"
 #  endif
@@ -728,6 +725,20 @@ static void font_load_chain(void) {
             LOG_ERROR("djui_modern: font_path \"%s\" not readable, falling back", gDjuiModernConfig.fontPath);
         }
     }
+
+#if defined(__ANDROID__)
+    if (!haveExternal) {
+        const char* writeDir = fs_get_write_path("");
+        if (writeDir != NULL && writeDir[0] != '\0') {
+            char dir[SYS_MAX_PATH];
+            if (snprintf(dir, sizeof(dir), "%sdjui_modern", writeDir) > 0 && font_try_dir(dir)) {
+                haveExternal = true;
+            } else if (font_try_dir(writeDir)) {
+                haveExternal = true;
+            }
+        }
+    }
+#endif
 
     if (!haveExternal) {
         const char* exeDir = sys_exe_path_dir();

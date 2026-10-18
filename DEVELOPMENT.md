@@ -744,6 +744,8 @@ ky2 = ((g2 - 1.0f) * cellH - (inkY0 - inkH)) / inkH;
 ```
 1. 配置里的 font_path
 2. 自动探测下列目录（**先找到先用**，文件名随便叫，只要是 .ttf / .otf）：
+     Android：<djui_modern.cfg 所在目录>/djui_modern/*.ttf, *.otf
+     Android：<djui_modern.cfg 所在目录>/*.ttf, *.otf
      <游戏根目录>/djui_modern/*.ttf, *.otf   ← 推荐：建个文件夹丢进去即可
      <游戏根目录>/*.ttf, *.otf               ← 直接放游戏根目录
    同一目录里有多个字体时，按**文件名升序**取第一个（结果确定，不会每次换）。
