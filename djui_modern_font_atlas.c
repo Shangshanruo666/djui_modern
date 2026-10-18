@@ -900,6 +900,8 @@ bool djui_modern_font_atlas_init(void) {
         }
         LOG_INFO("djui_modern: charset probe (g=glyph, i=charset index, f=font face, -1=absent)%s", buf);
     }
+
+    return true;
 }
 
 void djui_modern_font_atlas_shutdown(void) {
@@ -1014,6 +1016,9 @@ f32 djui_modern_font_atlas_get_scale_hint(void) {
 
 /* 字形光栅超采样系数。 */
 #define kGlyphSupersample 1.25f
+
+/* 小字号汉字的最低光栅尺寸。 */
+#define kSmallCjkMinRasterEm 48.0f
 
 /* 将屏幕 em 像素映射到光栅档位。 */
 static s32 bucket_index_for_em(f32 em) {
@@ -1541,6 +1546,9 @@ void djui_modern_font_atlas_render_char(const char* c) {
     f32 em = djui_modern_font_atlas_get_scale_hint() * gDjuiModernConfig.textScale;
     if (em < 1.0f) { em = 1.0f; }
     if (em > 4096.0f) { em = 4096.0f; }
+    if (codepoint_is_cjk(cp) && em < kSmallCjkMinRasterEm) {
+        em = kSmallCjkMinRasterEm;
+    }
     const s32 bi = bucket_index_for_em(em);
     const s32 bucket = kRasterBuckets[bi];
 
