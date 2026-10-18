@@ -37,6 +37,10 @@ TARGET_FILES = [
     "src/pc/gfx/gfx_dxgi.cpp",
 ]
 
+ANDROID_ONLY_TARGET_FILES = [
+    "Android.mk",
+]
+
 
 def read_lf(path):
     with open(path, "rb") as f:
@@ -287,6 +291,39 @@ def main():
             removed2 = sum(1 for l in p2.splitlines() if l.startswith("-") and not l.startswith("---"))
             print("  %-40s +%-4d -%-4d  -> %-34s [android]" % ("  ↳ Android 变体", added2, removed2, name2))
             made += 1
+
+    for j, rel in enumerate(ANDROID_ONLY_TARGET_FILES, start=len(TARGET_FILES) + 1):
+        if android is None:
+            skipped.append(rel + "（未提供 Android 上游）")
+            continue
+
+        and_path = os.path.join(android, rel)
+        cur_path = os.path.join(current, rel)
+        if not os.path.isfile(and_path) or not os.path.isfile(cur_path):
+            skipped.append(rel + "（文件缺失）")
+            continue
+
+        up = read_lf(and_path)
+        cur = read_lf(cur_path)
+        if up == cur:
+            skipped.append(rel + "（无改动）")
+            continue
+
+        p = make_patch(rel, up, cur)
+        recheck, recheck_err = reapply_patch_to(up.decode("utf-8", "replace"), p)
+        if recheck_err is not None or recheck != cur.decode("utf-8", "replace"):
+            print("  !! %s 自检失败（%s），已中止" % (rel, recheck_err or "结果不一致"))
+            return 2
+
+        base = os.path.basename(rel)
+        name = "%02d-%s.android.patch" % (j, base)
+        with open(os.path.join(outdir, name), "w", encoding="utf-8", newline="\n") as f:
+            f.write(p)
+        entries.append((name, rel, "src/pc/djui_modern", "android"))
+        added = sum(1 for l in p.splitlines() if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in p.splitlines() if l.startswith("-") and not l.startswith("---"))
+        print("  %-40s +%-4d -%-4d  -> %-34s [android]" % (rel, added, removed, name))
+        made += 1
 
     with open(os.path.join(outdir, "markers.txt"), "w", encoding="utf-8", newline="\n") as f:
         f.write("# 自动生成，请勿手工编辑（由 src/pc/djui_modern/tools/make_patches.py 产出）。\n")

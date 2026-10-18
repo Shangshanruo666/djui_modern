@@ -16,3 +16,4 @@
 11-djui_panel_host_mods.c.patch|src/pc/djui/djui_panel_host_mods.c|* mod 描述面板（右侧那块）。**非 static**：djui_modern 要拿它判断|any
 12-djui_panel_host_mods.h.patch|src/pc/djui/djui_panel_host_mods.h|* mod 描述面板（右侧那块）。**非 static**：djui_modern 用它判断|any
 13-gfx_dxgi.cpp.patch|src/pc/gfx/gfx_dxgi.cpp|* 把 WM_CHAR 送来的 UTF-16 code unit 转成 UTF-8 交给上层。|any
+14-Android.mk.android.patch|Android.mk|src/pc/djui_modern|android
