@@ -23,7 +23,7 @@ static void djui_modern_config_defaults(void) {
     // 0：羊角螺线过渡；1：正圆弧。
     gDjuiModernConfig.cornerRoundness = 0.90f;
 
-    gDjuiModernConfig.panelAlpha   = 224;
+    gDjuiModernConfig.panelAlpha   = 244;
     gDjuiModernConfig.elementAlpha = 208;
     gDjuiModernConfig.overlayAlpha = 176;
 
@@ -53,8 +53,8 @@ static void djui_modern_config_defaults(void) {
     gDjuiModernConfig.textScale = 1.0f;
 
     // 指定面板是否使用矢量字体。
-    gDjuiModernConfig.fontPlayerList     = true;
-    gDjuiModernConfig.fontModDescription = true;
+    gDjuiModernConfig.fontPlayerList     = false;
+    gDjuiModernConfig.fontModDescription = false;
 
     // 默认替换正文槽 0 与 ALIASED 槽 3。
     {
@@ -223,7 +223,7 @@ static const char kDefaultCfgText[] =
 "corner_roundness = 0.90\n"
 "\n"
 "# ---------------- 半透明 ----------------\n"
-"panel_alpha   = 224     # 面板背景不透明度 0-255\n"
+"panel_alpha   = 244     # 面板背景不透明度 0-255\n"
 "element_alpha = 208     # 控件背景不透明度\n"
 "overlay_alpha = 176     # 覆盖层（聊天栏底、弹窗遮罩）不透明度\n"
 "\n"
@@ -275,10 +275,10 @@ static const char kDefaultCfgText[] =
 "# 玩家列表（PLAYERS 面板）是否用矢量字体。\n"
 "#   true  = 矢量字体（默认）\n"
 "#   false = 原版点阵字体\n"
-"font_player_list = true\n"
+"font_player_list = false\n"
 "\n"
 "# mod 列表 / mod 描述面板是否用矢量字体。语义同上。\n"
-"font_mod_description = true\n"
+"font_mod_description = false\n"
 "\n"
 "# ---------------- 调试 ----------------\n"
 "# 输出加载信息与每帧渲染统计。排查问题时启用。\n"

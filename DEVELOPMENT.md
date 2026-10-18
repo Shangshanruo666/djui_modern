@@ -597,7 +597,7 @@ ky2 = ((g2 - 1.0f) * cellH - (inkY0 - inkH)) / inkH;
 
 | 键               | 默认    | 说明                 |
 | --------------- | ----- | ------------------ |
-| `panel_alpha`   | `224` | 面板背景不透明度（0-255）    |
+| `panel_alpha`   | `244` | 面板背景不透明度（0-255）    |
 | `element_alpha` | `208` | 控件背景不透明度           |
 | `overlay_alpha` | `176` | 覆盖层（聊天栏底、弹窗遮罩）不透明度 |
 
@@ -633,8 +633,8 @@ ky2 = ((g2 - 1.0f) * cellH - (inkY0 - inkH)) / inkH;
 | `font_native_metrics`   | `true`  | 西文是否直接用字体原生字距（关掉会明显偏窄，见下）        |
 | `font_fallback_kerning` | `true`  | 字体缺该对字偶间距时，用内置"常见西文对"兜底（见下）      |
 | `font_slots`            | `0 3`   | 用 TTF 替换的字体槽（见下）                     |
-| `font_player_list`      | `true`  | **玩家列表（PLAYERS 面板）**是否用矢量字体（见下）        |
-| `font_mod_description`  | `true`  | **mod 列表 / mod 描述面板**是否用矢量字体（见下）       |
+| `font_player_list`      | `false` | **玩家列表（PLAYERS 面板）**是否用矢量字体（见下）        |
+| `font_mod_description`  | `false` | **mod 列表 / mod 描述面板**是否用矢量字体（见下）       |
 | `emoji`                 | `modern` | Emoji 版本：`modern` = 内嵌彩色图集；`vanilla` = 原版 32×32 单色贴图 |
 | `show_stats`            | `false` | 打印字体统计                                |
 
