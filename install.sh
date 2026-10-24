@@ -147,7 +147,7 @@ say "-- 步骤 1/3: 挂载模块 --"
 # ── 2. 子模块 ───────────────────────────────────────────────────────────────
 if [ "$USE_SUBMODULE" = "0" ]; then
     info "--no-submodule：跳过子模块步骤"
-    [ -d "$MODULE_DIR" ] || die "模块目录不存在: $MODULE_DIR（请先手动放置模块，或去掉 --no-submodule）"
+    [ -d "$MODULE_DIR" ] || die "模块目录不存在: ${MODULE_DIR}（请先手动放置模块，或去掉 --no-submodule）"
 elif [ -d "$MODULE_DIR" ]; then
     info "模块目录已存在，跳过子模块挂载: src/pc/djui_modern"
 else
@@ -265,10 +265,10 @@ for p in "$PATCH_DIR"/*.patch; do
 
     # 平台不匹配的变体直接跳过（不计入统计）
     if [ "$plat" = "desktop" ] && [ "$IS_ANDROID" = "1" ]; then
-        info "$name：桌面专用，跳过"; continue
+        info "${name}：桌面专用，跳过"; continue
     fi
     if [ "$plat" = "android" ] && [ "$IS_ANDROID" = "0" ]; then
-        info "$name：Android 专用，跳过"; continue
+        info "${name}：Android 专用，跳过"; continue
     fi
 
     state="unknown"
@@ -277,10 +277,10 @@ for p in "$PATCH_DIR"/*.patch; do
     fi
 
     if [ "$REVERT" = "0" ] && [ "$state" = "applied" ]; then
-        SKIPPED=$((SKIPPED + 1)); info "$name：已应用，跳过"; continue
+        SKIPPED=$((SKIPPED + 1)); info "${name}：已应用，跳过"; continue
     fi
     if [ "$REVERT" = "1" ] && [ "$state" = "clean" ]; then
-        SKIPPED=$((SKIPPED + 1)); info "$name：未应用，无需撤销"; continue
+        SKIPPED=$((SKIPPED + 1)); info "${name}：未应用，无需撤销"; continue
     fi
 
     if apply_one "$p" "$REVERT"; then
@@ -291,14 +291,14 @@ for p in "$PATCH_DIR"/*.patch; do
                 if ! grep -F -q -- "$mk" "$ROOT/$tgt" 2>/dev/null; then
                     apply_one "$p" 1 >/dev/null 2>&1 || true
                     FAILED=$((FAILED + 1)); FAILED_LIST="$FAILED_LIST $name"
-                    err "$name：应用后校验失败（标记未出现），已回滚"
+                    err "${name}：应用后校验失败（标记未出现），已回滚"
                     continue
                 fi
             else
                 if grep -F -q -- "$mk" "$ROOT/$tgt" 2>/dev/null; then
                     apply_one "$p" 0 >/dev/null 2>&1 || true
                     FAILED=$((FAILED + 1)); FAILED_LIST="$FAILED_LIST $name"
-                    err "$name：撤销后标记仍在，已重新应用"
+                    err "${name}：撤销后标记仍在，已重新应用"
                     continue
                 fi
             fi
@@ -306,7 +306,7 @@ for p in "$PATCH_DIR"/*.patch; do
         CHANGED=$((CHANGED + 1))
         if [ "$REVERT" = "1" ]; then ok "$name （已撤销）"; else ok "$name （已校验）"; fi
     else
-        FAILED=$((FAILED + 1)); FAILED_LIST="$FAILED_LIST $name"; err "$name：应用失败"
+        FAILED=$((FAILED + 1)); FAILED_LIST="$FAILED_LIST $name"; err "${name}：应用失败"
     fi
 done
 
