@@ -1,8 +1,8 @@
 // ============================================================================
 // 自动生成，请勿手工编辑。
 //
-//   生成命令: python src/pc/djui_modern/tools/make_emoji_atlas.py Noto-3D-128.ttf djui_modern_emoji_data.h --size 32 --flags Noto-3D-128-flagsonly.ttf
-//   来源字体: Noto-3D-128-flagsonly.ttf (ppem=109)
+//   生成命令: python src/pc/djui_modern/tools/make_emoji_atlas.py Noto-3D-128-Subset.ttf djui_modern_emoji_data.h --size 32 --flags Noto-3D-128-flagsonly-Subset.ttf
+//   来源字体: Noto-3D-128-flagsonly-Subset.ttf (ppem=109)
 //   授权    : SIL Open Font License 1.1（Noto Emoji）
 //
 // 16x16 格，每格 32x32，整图 512x512 RGBA32。

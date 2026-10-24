@@ -12,8 +12,12 @@
 | 西文与通用标点 | `RobotoCondensed-Subset.ttf` | 17 KB，138 个字形，129 个映射码点 | SIL OFL 1.1 |
 | 中文字形补充 | `SourceHanSansSC-Subset.otf` | 1.78 MB，6964 个字形，6930 个映射码点 | SIL OFL 1.1 |
 | 星星 | `Power Star.otf` | 2 KB，2 个字形，1 个映射码位（U+007F） | SIL OFL 1.1 |
+| Emoji 源字体 | `Noto-3D-128-Subset.ttf` | 14 MB，461 个字形，位图数据 | SIL OFL 1.1 |
+| 国旗源字体 | `Noto-3D-128-flagsonly-Subset.ttf` | 6.9 MB，279 个字形，位图数据 | SIL OFL 1.1 |
 | 彩色 Emoji | `djui_modern_emoji_data.h` | 512×512 PNG 图集，179 个条目 | SIL OFL 1.1 |
 | 国旗 | `djui_modern_flag_data.h` | 512×512 PNG 图集，251 个条目 | SIL OFL 1.1 |
+
+Noto 字体是图集生成的源文件，不参与运行期加载。
 
 ## 字体链
 
@@ -122,12 +126,30 @@ python src/pc/djui_modern/tools/make_font_c.py \
 
 ```sh
 python src/pc/djui_modern/tools/make_emoji_atlas.py \
-  build/Noto-3D-128.ttf \
+  src/pc/djui_modern/font/Noto-3D-128-Subset.ttf \
   src/pc/djui_modern/djui_modern_emoji_data.h \
-  --flags build/Noto-3D-128-flagsonly.ttf
+  --size 32 \
+  --flags src/pc/djui_modern/font/Noto-3D-128-flagsonly-Subset.ttf
 ```
 
-默认格尺寸为 32，PNG 为默认输出格式。
+格尺寸为 32，PNG 为默认输出格式。
+
+位图字体没有可用的字符范围，子集化范围由码点清单给出。清单已随仓库提供：
+
+```sh
+python src/pc/djui_modern/tools/make_subset_font.py \
+  src/pc/djui_modern/font/Noto-3D-128-Subset.ttf \
+  --codepoints src/pc/djui_modern/font/emoji-codepoints.txt
+
+python src/pc/djui_modern/tools/make_subset_font.py \
+  src/pc/djui_modern/font/Noto-3D-128-flagsonly-Subset.ttf \
+  --codepoints src/pc/djui_modern/font/emoji-codepoints.txt
+```
+
+国旗字体的连字依赖 GSUB，子集化时保留全部布局特性，因此字形数量不变，
+体积只减少未使用的 strike 数据。
+
+`make_emoji_codepoints.py` 用于从完整字体重新生成码点清单，需要完整字体文件。
 
 ## 验证
 

@@ -328,12 +328,13 @@ python src/pc/djui_modern/tools/make_font_c.py \
 
 # Emoji 和国旗图集
 python src/pc/djui_modern/tools/make_emoji_atlas.py \
-  build/Noto-3D-128.ttf \
+  src/pc/djui_modern/font/Noto-3D-128-Subset.ttf \
   src/pc/djui_modern/djui_modern_emoji_data.h \
-  --flags build/Noto-3D-128-flagsonly.ttf
+  --size 32 \
+  --flags src/pc/djui_modern/font/Noto-3D-128-flagsonly-Subset.ttf
 ```
 
-完整来源、授权和字表范围见 [font/README.md](./font/README.md)。
+来源、授权和字表范围见 [font/README.md](./font/README.md)。
 
 ## 补丁生成
 

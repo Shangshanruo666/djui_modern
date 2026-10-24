@@ -4,6 +4,7 @@
 用法:
     python src/pc/djui_modern/tools/make_subset_font.py <源字体> <输出字体>
         [--han LEVEL] [--glyph-source PATH] [--exclude-font PATH]
+        [--codepoints PATH]
 
 思源黑体 / 思源宋体的 OTF 通常为 15~20MB。直接内嵌为 C 头文件会膨胀到
 约 4 倍（60MB+），显著增大仓库体积和构建时间。
@@ -23,6 +24,9 @@ RobotoCondensed-Subset.ttf，可避免重复内嵌 Roboto 已有的 ASCII 和标
 
 --glyph-source 指定游戏字表文件。生成中文子集时传入
 src/pc/djui/cn_glyphs.h，脚本会读取其中的全部字符。
+
+--codepoints 指定码点列表文件，每行一个十进制或十六进制码点。
+位图字体（sbix 表）没有可用的字符范围，需要用该选项显式给出收录范围。
 
 注：子集化只影响内嵌默认字体。仍可在游戏根目录或 djui_modern/ 文件夹中
 放置任意 .ttf/.otf 覆盖它。该字体在运行期完整加载，不受这里限制。
@@ -106,6 +110,7 @@ def parse_args(argv):
     level = "gb2312"
     glyph_source = None
     exclude_font = None
+    codepoints_file = None
     i = 0
     while i < len(argv):
         arg = argv[i]
@@ -124,6 +129,11 @@ def parse_args(argv):
                 raise ValueError("--glyph-source requires a path")
             glyph_source = argv[i + 1]
             i += 2
+        elif arg == "--codepoints":
+            if i + 1 >= len(argv):
+                raise ValueError("--codepoints requires a path")
+            codepoints_file = argv[i + 1]
+            i += 2
         elif arg.startswith("-"):
             raise ValueError("unknown option: %s" % arg)
         elif src is None:
@@ -140,7 +150,20 @@ def parse_args(argv):
     if level not in ("gb2312", "common", "none"):
         raise ValueError("--han must be one of gb2312/common/none")
 
-    return src, dst, level, glyph_source, exclude_font
+    return src, dst, level, glyph_source, exclude_font, codepoints_file
+
+
+def load_codepoint_list(path):
+    out = set()
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            out.add(int(line, 0))
+    if not out:
+        raise ValueError("no codepoints found in %s" % path)
+    return out
 
 
 def load_codepoints(path):
@@ -155,7 +178,7 @@ def load_codepoints(path):
 
 def main():
     try:
-        src, dst, level, glyph_source, exclude_font = parse_args(sys.argv[1:])
+        src, dst, level, glyph_source, exclude_font, codepoints_file = parse_args(sys.argv[1:])
     except ValueError as exc:
         print("error: %s" % exc, file=sys.stderr)
         print(__doc__)
@@ -170,23 +193,40 @@ def main():
     if exclude_font is not None and not os.path.isfile(exclude_font):
         print("error: %s not found" % exclude_font, file=sys.stderr)
         return 1
+    if codepoints_file is not None and not os.path.isfile(codepoints_file):
+        print("error: %s not found" % codepoints_file, file=sys.stderr)
+        return 1
 
     from fontTools import subset
     from fontTools.ttLib import TTFont
 
     excluded_codepoints = load_codepoints(exclude_font) if exclude_font else set()
-    try:
-        text = build_text(level, glyph_source, excluded_codepoints)
-    except ValueError as exc:
-        print("error: %s" % exc, file=sys.stderr)
-        return 1
+    if codepoints_file is not None:
+        try:
+            codepoints = load_codepoint_list(codepoints_file)
+        except ValueError as exc:
+            print("error: %s" % exc, file=sys.stderr)
+            return 1
+        text = "".join(chr(cp) for cp in sorted(codepoints))
+        excluded_count = len(excluded_codepoints)
+    else:
+        try:
+            text = build_text(level, glyph_source, excluded_codepoints)
+        except ValueError as exc:
+            print("error: %s" % exc, file=sys.stderr)
+            return 1
+        excluded_count = len(excluded_codepoints)
     print("source : %s (%d bytes)" % (src, os.path.getsize(src)))
     if glyph_source:
         print("glyphs : %s" % glyph_source)
     if exclude_font:
         print("exclude: %s (%d mapped codepoints)" % (exclude_font, len(excluded_codepoints)))
-    print("charset: %d chars (han level=%s, excluded=%d)"
-          % (len(text), level, len(excluded_codepoints)))
+    if codepoints_file:
+        print("codepoints: %d entries from %s"
+              % (len(text), codepoints_file))
+    else:
+        print("charset: %d chars (han level=%s, excluded=%d)"
+              % (len(text), level, excluded_count))
 
     font = TTFont(src)
     font.recalcTimestamp = False
@@ -198,7 +238,8 @@ def main():
     options.name_legacy = True
     options.notdef_outline = True
     options.recommended_glyphs = True
-    options.layout_features = ["kern", "liga", "vert", "vrt2"]
+    # 位图字体的连字（国旗）依赖 GSUB，保留全部布局特性。
+    options.layout_features = ["*"]
     options.notdef_glyph = True
     options.recalc_timestamp = False
 
