@@ -57,6 +57,18 @@ sh install.sh --android --root /path/to/sm64coopdx
 sh install.sh --root /path/to/sm64coopdx --url <仓库地址>
 ```
 
+也可以直接把脚本管道给 bash，位置参数为模块分支：
+
+```sh
+# 桌面
+curl -LSs https://raw.githubusercontent.com/Shangshanruo666/djui_modern/main/install.sh \
+  | bash -s main --root /path/to/sm64coopdx
+
+# Android
+curl -LSs https://raw.githubusercontent.com/Shangshanruo666/djui_modern/main/install.sh \
+  | bash -s main --android --root /path/to/sm64coopdx
+```
+
 常用参数：
 
 | 参数 | 作用 |
@@ -68,6 +80,8 @@ sh install.sh --root /path/to/sm64coopdx --url <仓库地址>
 | `--dry-run` | 只检查补丁兼容性，不写入文件 |
 | `--revert` | 反向应用补丁 |
 | `-h`, `--help` | 显示安装器帮助 |
+
+位置参数为挂载子模块时使用的分支，省略时使用仓库默认分支。
 
 安装完成后，在源码树根目录执行：
 

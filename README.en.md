@@ -61,6 +61,19 @@ upstream patches. To use a different repository:
 sh install.sh --root /path/to/sm64coopdx --url <repository-url>
 ```
 
+The script can also be piped into bash. The positional argument selects the
+module branch:
+
+```sh
+# Desktop
+curl -LSs https://raw.githubusercontent.com/Shangshanruo666/djui_modern/main/install.sh \
+  | bash -s main --root /path/to/sm64coopdx
+
+# Android
+curl -LSs https://raw.githubusercontent.com/Shangshanruo666/djui_modern/main/install.sh \
+  | bash -s main --android --root /path/to/sm64coopdx
+```
+
 Options:
 
 | Option | Purpose |
@@ -72,6 +85,9 @@ Options:
 | `--dry-run` | Check patch compatibility without writing files |
 | `--revert` | Reverse the patches |
 | `-h`, `--help` | Show installer help |
+
+The positional argument selects the branch used for the submodule. The repository
+default branch is used when it is omitted.
 
 Build from the source tree root after installation:
 

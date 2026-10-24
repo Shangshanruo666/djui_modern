@@ -36,6 +36,13 @@ sh install.sh --android --root /path/to/sm64coopdx
 参数 `--android` 会启用 Android 分支检查、配置文件路径提示和 Android 补丁变体。
 不传该参数时安装桌面版本。
 
+位置参数为挂载子模块时使用的分支。管道方式下，补丁从克隆出的模块目录读取：
+
+```sh
+curl -LSs https://raw.githubusercontent.com/Shangshanruo666/djui_modern/main/install.sh \
+  | bash -s main --root /path/to/sm64coopdx
+```
+
 以下情况使用 `--no-submodule`：
 
 - 模块目录已经存在。
