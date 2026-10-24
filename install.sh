@@ -1,27 +1,8 @@
 #!/bin/sh
-#  djui_modern 安装脚本（桌面：Windows / macOS / Linux）
+#  djui_modern 安装脚本
 #
-#  把一个干净的 sm64coopdx（及其分支）源码树改造成"已装好本模块"的状态：
-#
-#    1. 确认当前目录确实是 sm64coopdx 源码树（有 Makefile + src/pc/djui/…）
-#    2. 把本模块挂成 git 子模块：<根目录>/src/pc/djui_modern
-#    3. 应用 patches/*.patch：也就是 README 里"需要改动的原文件"表列出的
-#       全部改动。README 没收录的改动不会进补丁（防止夹带）。
-#
-#  用法：
-#      sh install.sh                 # 在当前目录安装（须是源码树根目录）
-#      sh install.sh --root <目录>    # 指定源码树根目录
-#      sh install.sh --url <仓库地址>  # 指定本模块的仓库地址（默认自动探测）
-#      sh install.sh --no-submodule  # 不碰 git，只应用补丁（模块已就位时用）
-#      sh install.sh --revert        # 反向应用补丁（撤销对原版文件的改动）
-#      sh install.sh --dry-run       # 只检查能否应用，不写文件
-#      sh install.sh <分支>          # 指定模块分支
-#      curl -LSs <install.sh 链接> | bash -s <分支>
-#
-#  Android 分支请改用 install-android.sh（它多做的是 Android 专属检查，
-#  并提示配置文件位置：Android 上 djui_modern.cfg 与 dynos/、mods/ 同级）。
-#
-#  依赖：`git` 或 `patch` 至少有一个；`git` 用于挂子模块（--no-submodule 可跳过）。
+#  用法：sh install.sh [--android] [选项]
+#  默认安装桌面版本；传入 --android 时使用 Android 检查和补丁。
 
 set -u
 
@@ -31,30 +12,41 @@ DEFAULT_URL="https://github.com/Shangshanruo666/djui_modern.git"
 # ── 解析参数 ────────────────────────────────────────────────────────────────
 ROOT=""
 URL=""
-MODULE_REF=""
 USE_SUBMODULE=1
 DRY_RUN=0
 REVERT=0
 TARGET="desktop"
 
+usage() {
+    cat <<'EOF'
+用法:
+  sh install.sh [--android] [选项]
+
+参数:
+  --android            使用 Android 检查和补丁
+
+选项:
+  --root <目录>        指定 sm64coopdx 源码树
+  --url <地址>         指定挂载子模块时使用的仓库地址
+  --no-submodule       不操作 git，只检查或应用补丁
+  --dry-run            只检查补丁兼容性，不写入文件
+  --revert             反向应用补丁
+  -h, --help           显示帮助
+EOF
+}
+
 while [ $# -gt 0 ]; do
     case "$1" in
+        --android)      TARGET="android"; shift ;;
         --root)         ROOT="$2"; shift 2 ;;
         --url)          URL="$2"; shift 2 ;;
         --no-submodule) USE_SUBMODULE=0; shift ;;
         --dry-run)      DRY_RUN=1; shift ;;
         --revert)       REVERT=1; shift ;;
-        --target)       TARGET="$2"; shift 2 ;;
-        -h|--help)
-            sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
-            exit 0 ;;
-        -*)
+        -h|--help)      usage; exit 0 ;;
+        *)
             echo "未知参数: $1（用 --help 看用法）" >&2
             exit 2 ;;
-        *)
-            [ -z "$MODULE_REF" ] || { echo "未知参数: $1" >&2; exit 2; }
-            MODULE_REF="$1"
-            shift ;;
     esac
 done
 
@@ -69,10 +61,6 @@ die()  { err "$*"; exit 1; }
 
 # 脚本自身所在目录（本模块的根目录）
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-MODULE_SOURCE_DIR=""
-if [ -f "$SCRIPT_DIR/install.sh" ] && [ -d "$SCRIPT_DIR/patches" ]; then
-    MODULE_SOURCE_DIR="$SCRIPT_DIR"
-fi
 
 # ── 1. 定位源码树根目录 ─────────────────────────────────────────────────────
 looks_like_sm64coopdx() {
@@ -104,33 +92,35 @@ if ! looks_like_sm64coopdx "$ROOT"; then
 fi
 ok "确认是 sm64coopdx（及其分支）源码树"
 
-IS_ANDROID_TREE=0
-[ -f "$ROOT/Android.mk" ] && IS_ANDROID_TREE=1
-
-# 分支类型判定（决定用哪一套补丁：桌面 / Android）
-#   · --target android 明确指定；或
-#   · 同时存在 Android.mk 且 Makefile 里有 TARGET_ANDROID
-IS_ANDROID=0
 if [ "$TARGET" = "android" ]; then
+    [ -f "$ROOT/Android.mk" ] &&
+        ok "确认存在 Android.mk" ||
+        warn "$ROOT 下没有 Android.mk；请确认目标是 Android 分支"
+
+    if [ -f "$ROOT/src/pc/platform.h" ]; then
+        APPNAME=$(sed -n 's/^#define[[:space:]]\+ANDROID_APPNAME[[:space:]]\+"\(.*\)".*/\1/p' \
+                  "$ROOT/src/pc/platform.h" | head -1)
+        if [ -n "$APPNAME" ]; then
+            info "Android 应用包名: $APPNAME"
+            info "配置路径: /storage/emulated/0/Android/data/$APPNAME/files/djui_modern.cfg"
+            info "存储权限已授予时: /storage/emulated/0/$APPNAME/djui_modern.cfg"
+        fi
+    fi
     IS_ANDROID=1
-elif [ "$IS_ANDROID_TREE" = "1" ] && grep -q "TARGET_ANDROID" "$ROOT/Makefile" 2>/dev/null; then
-    IS_ANDROID=1
-fi
-if [ "$IS_ANDROID" = "1" ]; then
     say "分支类型: Android（使用 *.android.patch 变体）"
 else
+    IS_ANDROID=0
     say "分支类型: 桌面（Windows / macOS / Linux）"
-    if [ "$IS_ANDROID_TREE" = "1" ]; then
-        warn "这看起来是 Android 分支（存在 Android.mk）。"
-        warn "Android 的补丁变体不同，建议改用 install-android.sh。"
+    if [ -f "$ROOT/Android.mk" ]; then
+        warn "检测到 Android.mk；安装 Android 版本请使用: sh install.sh --android"
     fi
 fi
 
 MODULE_DIR="$ROOT/src/pc/djui_modern"
-PATCH_DIR=""
+PATCH_DIR="$SCRIPT_DIR/patches"
 
 # git / patch 的可用性（早于子模块步骤就要知道）
-# 用 `git --version` 真跑一次：PATH 里可能存在"存在但不可用"的 git。
+# 实际执行 `git --version`，避免 PATH 中存在不可用的 git。
 HAVE_GIT=0;  git --version >/dev/null 2>&1 && HAVE_GIT=1
 HAVE_PATCH=0; patch --version >/dev/null 2>&1 && HAVE_PATCH=1
 
@@ -140,41 +130,32 @@ say "-- 步骤 1/3: 挂载模块 --"
 # ── 2. 子模块 ───────────────────────────────────────────────────────────────
 if [ "$USE_SUBMODULE" = "0" ]; then
     info "--no-submodule：跳过子模块步骤"
-    [ -d "$MODULE_DIR" ] || die "模块目录不存在: ${MODULE_DIR}（请先手动放置模块，或去掉 --no-submodule）"
+    [ -d "$MODULE_DIR" ] || die "模块目录不存在: $MODULE_DIR（请先手动放置模块，或去掉 --no-submodule）"
 elif [ -d "$MODULE_DIR" ]; then
     info "模块目录已存在，跳过子模块挂载: src/pc/djui_modern"
 else
-    if [ -z "$URL" ] && [ -n "$MODULE_SOURCE_DIR" ]; then
+    if [ -z "$URL" ]; then
         # 优先用本模块自己克隆里的 origin
-        if [ "$HAVE_GIT" = "1" ] && git -C "$MODULE_SOURCE_DIR" rev-parse --git-dir >/dev/null 2>&1; then
-            URL=$(git -C "$MODULE_SOURCE_DIR" remote get-url origin 2>/dev/null || true)
+        if [ "$HAVE_GIT" = "1" ] && git -C "$SCRIPT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+            URL=$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null || true)
         fi
     fi
     [ -n "$URL" ] || URL="$DEFAULT_URL"
 
     if [ "$HAVE_GIT" = "0" ]; then
-        die "需要 git 才能挂子模块（或改用 --no-submodule 并手动放置模块）。"
+        die "需要 git 才能挂载子模块（或使用 --no-submodule 并手动放置模块）。"
     fi
     if ! git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
-        warn "$ROOT 不是 git 仓库，无法挂子模块。"
-        warn "请手动把模块放到 src/pc/djui_modern，然后加 --no-submodule 重跑。"
+        warn "$ROOT 不是 git 仓库，无法挂载子模块。"
+        warn "请手动将模块放到 src/pc/djui_modern，然后使用 --no-submodule 重新执行。"
         exit 1
     fi
-    if [ -n "$MODULE_REF" ]; then
-        info "git submodule add -b $MODULE_REF $URL src/pc/djui_modern"
-    else
-        info "git submodule add $URL src/pc/djui_modern"
-    fi
+    info "git submodule add $URL src/pc/djui_modern"
     if [ "$DRY_RUN" = "1" ]; then
         info "（--dry-run：不实际执行）"
     else
-        if [ -n "$MODULE_REF" ]; then
-            ( cd "$ROOT" && git submodule add -b "$MODULE_REF" "$URL" src/pc/djui_modern ) ||
-                die "子模块挂载失败（分支或仓库地址是否正确？）"
-        else
-            ( cd "$ROOT" && git submodule add "$URL" src/pc/djui_modern ) ||
-                die "子模块挂载失败（仓库地址是否正确？可用 --url 指定）"
-        fi
+        ( cd "$ROOT" && git submodule add "$URL" src/pc/djui_modern ) ||
+            die "子模块挂载失败（仓库地址是否正确？可用 --url 指定）"
         ok "子模块已挂到 src/pc/djui_modern"
     fi
 fi
@@ -182,8 +163,6 @@ fi
 say ""
 say "-- 步骤 2/3: 应用原版文件补丁 --"
 
-SCRIPT_DIR="$MODULE_DIR"
-PATCH_DIR="$MODULE_DIR/patches"
 [ -d "$PATCH_DIR" ] || die "找不到补丁目录: $PATCH_DIR"
 [ -d "$MODULE_DIR" ] || die "模块目录不存在: $MODULE_DIR"
 
@@ -238,7 +217,7 @@ apply_one() {
 
 # ── "这个补丁是否已经应用过"的确定性判据 ──────────────────────────────────
 # patches/markers.txt 由 src/pc/djui_modern/tools/make_patches.py 生成：
-# 每个补丁对应一条"只可能出现在打过补丁的文件里"的标记行，外加它的适用平台。
+# 每个补丁对应一条已应用状态标记及其适用平台。
 # 比"反向能否应用"可靠得多：`patch` 在已打过的文件上偶尔仍能匹配成功，
 # 会造成重复应用。
 MARKERS="$PATCH_DIR/markers.txt"
@@ -258,10 +237,10 @@ for p in "$PATCH_DIR"/*.patch; do
 
     # 平台不匹配的变体直接跳过（不计入统计）
     if [ "$plat" = "desktop" ] && [ "$IS_ANDROID" = "1" ]; then
-        info "${name}：桌面专用，跳过"; continue
+        info "$name：桌面专用，跳过"; continue
     fi
     if [ "$plat" = "android" ] && [ "$IS_ANDROID" = "0" ]; then
-        info "${name}：Android 专用，跳过"; continue
+        info "$name：Android 专用，跳过"; continue
     fi
 
     state="unknown"
@@ -270,10 +249,10 @@ for p in "$PATCH_DIR"/*.patch; do
     fi
 
     if [ "$REVERT" = "0" ] && [ "$state" = "applied" ]; then
-        SKIPPED=$((SKIPPED + 1)); info "${name}：已应用，跳过"; continue
+        SKIPPED=$((SKIPPED + 1)); info "$name：已应用，跳过"; continue
     fi
     if [ "$REVERT" = "1" ] && [ "$state" = "clean" ]; then
-        SKIPPED=$((SKIPPED + 1)); info "${name}：未应用，无需撤销"; continue
+        SKIPPED=$((SKIPPED + 1)); info "$name：未应用，无需撤销"; continue
     fi
 
     if apply_one "$p" "$REVERT"; then
@@ -284,14 +263,14 @@ for p in "$PATCH_DIR"/*.patch; do
                 if ! grep -F -q -- "$mk" "$ROOT/$tgt" 2>/dev/null; then
                     apply_one "$p" 1 >/dev/null 2>&1 || true
                     FAILED=$((FAILED + 1)); FAILED_LIST="$FAILED_LIST $name"
-                    err "${name}：应用后校验失败（标记未出现），已回滚"
+                    err "$name：应用后校验失败（标记未出现），已回滚"
                     continue
                 fi
             else
                 if grep -F -q -- "$mk" "$ROOT/$tgt" 2>/dev/null; then
                     apply_one "$p" 0 >/dev/null 2>&1 || true
                     FAILED=$((FAILED + 1)); FAILED_LIST="$FAILED_LIST $name"
-                    err "${name}：撤销后标记仍在，已重新应用"
+                    err "$name：撤销后标记仍在，已重新应用"
                     continue
                 fi
             fi
@@ -299,7 +278,7 @@ for p in "$PATCH_DIR"/*.patch; do
         CHANGED=$((CHANGED + 1))
         if [ "$REVERT" = "1" ]; then ok "$name （已撤销）"; else ok "$name （已校验）"; fi
     else
-        FAILED=$((FAILED + 1)); FAILED_LIST="$FAILED_LIST $name"; err "${name}：应用失败"
+        FAILED=$((FAILED + 1)); FAILED_LIST="$FAILED_LIST $name"; err "$name：应用失败"
     fi
 done
 
@@ -311,10 +290,10 @@ if [ "$FAILED" != "0" ]; then
     say ""
     err "以下补丁没能应用：$FAILED_LIST"
     say ""
-    say "常见原因：你的源码树与本模块发布时的上游版本差异较大。"
+    say "常见原因：目标源码树与本模块发布时的上游版本差异较大。"
     say "处理办法（任选）："
-    say "  · 用 --revert 撤销已应用的部分，然后手动按 README 的"
-    say "    \"需要改动的原文件\"表逐条修改（表里有精确的行数与说明）；"
+    say "  · 用 --revert 撤销已应用的部分，然后按 DEVELOPMENT.md 的"
+    say "    \"上游补丁边界\"表检查对应改动；"
     say "  · 或把冲突文件备份后，用  patch -p1 --merge 逐个手工合并。"
     exit 1
 fi

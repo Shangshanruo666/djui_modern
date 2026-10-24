@@ -19,25 +19,17 @@ diff --git a/src/pc/djui/djui.c b/src/pc/djui/djui.c
      gDjuiShuttingDown = false;
      sDjuiInited = false;
  }
-@@ -99,6 +103,17 @@ void djui_init(void) {
+@@ -99,6 +103,9 @@ void djui_init(void) {
      gDjuiRoot = djui_root_create();
      sDjuiRootBehind = djui_root_create();
  
-+    /*
-+     * 现代化 UI 皮肤层。钩子安装失败时会自动保持原版界面。
-+     *
-+     * ⚠⚠ 必须在**本函数里第一次 `djui_text_create()` 之前**调用：
-+     *   `djui_text_create()` 把 `gDjuiFonts[slot]` 的**当前指针**存进 `text->font`，
-+     *   而模块是在初始化时替换 `gDjuiFonts[]` 的 —— 先创建的文字节点会一直持有
-+     *   **原版字体指针**（真机表现："玩家列表时而矢量字体、时而原版字体"：
-+     *   面板在下面被预先创建，只有**重开面板**时新建的节点才拿到矢量字体）。
-+     */
++    // 字体安装必须先于首次创建文字节点。
 +    djui_modern_init();
 +
      gDjuiPauseOptions = djui_text_create(&sDjuiRootBehind->base, DLANG(MISC, R_BUTTON));
      djui_base_set_size_type(&gDjuiPauseOptions->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
      djui_base_set_size(&gDjuiPauseOptions->base, 1.0f, 32);
-@@ -192,6 +207,10 @@ void djui_reset_hud_params(void) {
+@@ -192,6 +199,10 @@ void djui_reset_hud_params(void) {
  void djui_render(void) {
      if (!sDjuiInited || gDjuiDisabled) { return; }
  
@@ -48,7 +40,7 @@ diff --git a/src/pc/djui/djui.c b/src/pc/djui/djui.c
      sSavedDisplayListHead = gDisplayListHead;
      gDjuiHudUtilsZ = 0;
      djui_reset_hud_params();
-@@ -243,6 +262,9 @@ void djui_render(void) {
+@@ -243,6 +254,9 @@ void djui_render(void) {
      djui_cursor_update();
      djui_base_render(&gDjuiConsole->base);
  

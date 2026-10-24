@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""从"未修改的上游源码"与"已装好本模块的源码"生成上游改动补丁集。
+"""从未修改的上游源码和已安装模块的源码生成上游补丁集。
 
-本模块需要往 sm64coopdx 的若干**原版文件**里插几行钩子。这些改动以 `.patch` 形式
-随模块发布，由 `install.sh` / `install-android.sh` 自动应用。
+模块对 sm64coopdx 的修改记录在 DEVELOPMENT.md 的“上游补丁边界”一节，
+并以 `.patch` 文件发布，由 `install.sh` 自动应用。
 
 用法（在 sm64coopdx 源码树根目录下执行）:
 
@@ -14,31 +14,34 @@
 生成到 `src/pc/djui_modern/patches/`：
   · `<nn>-<文件>.patch`           —— 两个分支通用
   · `<nn>-<文件>.android.patch`   —— 仅当 Android 分支的那份原版文件与桌面版
-                                      **内容不同**时才会额外生成
+                                      **内容不同**时才会额外生成（此时普通那份
+                                     只用于桌面）
+
+Android 分支的 `djui.c` 与桌面版修订不同。高 fuzz 应用可能将
+`djui_modern_post_render();` 插入函数作用域之外，同时仍返回成功。
+因此两个分支分别生成补丁，不依赖高 fuzz。
+
+注意：
+  · 只处理 TARGET_FILES 中登记的文件。
+  · 生成前将两边行尾统一为 LF，避免行尾差异干扰补丁内容。
 """
 import argparse
 import os
 import subprocess
 import sys
 
+# 与 DEVELOPMENT.md 的“上游补丁边界”表保持一致。
+# 钩子原型写在调用它的 .c 文件中，因此不修改上游头文件。
 TARGET_FILES = [
     "Makefile",
     "src/pc/djui/djui.c",
     "src/pc/djui/djui_rect.c",
-    "src/pc/djui/djui_rect.h",
     "src/pc/djui/djui_gfx.c",
-    "src/pc/djui/djui_gfx.h",
+    "src/pc/djui/djui_hud_utils.c",
     "src/pc/djui/djui_unicode.c",
     "src/pc/djui/djui_text.c",
-    "src/pc/djui/djui_text.h",
-    "src/pc/djui/djui_panel_host.c",
     "src/pc/djui/djui_panel_host_mods.c",
-    "src/pc/djui/djui_panel_host_mods.h",
     "src/pc/gfx/gfx_dxgi.cpp",
-]
-
-ANDROID_ONLY_TARGET_FILES = [
-    "Android.mk",
 ]
 
 
@@ -58,14 +61,15 @@ def make_patch(rel, old_bytes, new_bytes):
         with open(fb, "wb") as f:
             f.write(new_bytes)
         r = subprocess.run(["git", "diff", "--no-index", "--no-color", fa, fb],
-                           capture_output=True, text=True)
-        raw = r.stdout.splitlines(keepends=True)
+                           capture_output=True)
+        raw = r.stdout.decode("utf-8", "replace").splitlines(keepends=True)
 
     out = []
     for line in raw:
         if line.startswith("diff --git "):
             out.append("diff --git a/%s b/%s\n" % (rel, rel))
         elif line.startswith("index "):
+            # 去掉 index 行：它引用的是临时文件的 blob，目标仓库里没有
             continue
         elif line.startswith("--- "):
             out.append("--- a/%s\n" % rel)
@@ -77,14 +81,21 @@ def make_patch(rel, old_bytes, new_bytes):
 
 
 def pick_marker(patch, old_text):
-    """挑一条"只可能出现在打过补丁的文件里"的行，作为幂等判据。"""
+    """选择一条仅出现在已应用补丁中的行，作为幂等判据。"""
     added = [l[1:].strip() for l in patch.splitlines()
              if l.startswith("+") and not l.startswith("+++")]
     for line in added:
         if len(line) >= 6 and line not in old_text:
             return line
     return max(added, key=len) if added else ""
-    
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  将桌面版补丁应用到 Android 分支的同名文件。
+#
+#  Android 与桌面分支存在局部结构差异。逐个 hunk 应用时优先精确匹配；
+#  纯插入 hunk 无法精确匹配时，使用邻近上下文行和上一个 hunk 的位置定位。
+# ─────────────────────────────────────────────────────────────────────────────
 
 def parse_hunks(patch_text):
     """把 unified diff 解析成 hunk 列表；每个 hunk 是 [(kind, text)]，kind ∈ ' +-'。"""
@@ -255,7 +266,7 @@ def main():
         p = make_patch(rel, up, cur)
 
         # ── 自检：把补丁重新落到"桌面原版"上，必须逐字节等于当前工作树 ──
-        #    （保证 hunk 定位算法本身没跑偏；偏了就说明补丁或算法有问题）
+        #    （确认 hunk 定位结果一致；不一致时检查补丁或算法）
         recheck, recheck_err = reapply_patch_to(up.decode("utf-8", "replace"), p)
         if recheck_err is not None or recheck != cur.decode("utf-8", "replace"):
             print("  !! %s 自检失败（%s），已中止" % (rel, recheck_err or "结果不一致"))
@@ -289,41 +300,8 @@ def main():
                             "android"))
             added2 = sum(1 for l in p2.splitlines() if l.startswith("+") and not l.startswith("+++"))
             removed2 = sum(1 for l in p2.splitlines() if l.startswith("-") and not l.startswith("---"))
-            print("  %-40s +%-4d -%-4d  -> %-34s [android]" % ("  ↳ Android 变体", added2, removed2, name2))
+            print("  %-40s +%-4d -%-4d  -> %-34s [android]" % ("  -> Android variant", added2, removed2, name2))
             made += 1
-
-    for j, rel in enumerate(ANDROID_ONLY_TARGET_FILES, start=len(TARGET_FILES) + 1):
-        if android is None:
-            skipped.append(rel + "（未提供 Android 上游）")
-            continue
-
-        and_path = os.path.join(android, rel)
-        cur_path = os.path.join(current, rel)
-        if not os.path.isfile(and_path) or not os.path.isfile(cur_path):
-            skipped.append(rel + "（文件缺失）")
-            continue
-
-        up = read_lf(and_path)
-        cur = read_lf(cur_path)
-        if up == cur:
-            skipped.append(rel + "（无改动）")
-            continue
-
-        p = make_patch(rel, up, cur)
-        recheck, recheck_err = reapply_patch_to(up.decode("utf-8", "replace"), p)
-        if recheck_err is not None or recheck != cur.decode("utf-8", "replace"):
-            print("  !! %s 自检失败（%s），已中止" % (rel, recheck_err or "结果不一致"))
-            return 2
-
-        base = os.path.basename(rel)
-        name = "%02d-%s.android.patch" % (j, base)
-        with open(os.path.join(outdir, name), "w", encoding="utf-8", newline="\n") as f:
-            f.write(p)
-        entries.append((name, rel, "src/pc/djui_modern", "android"))
-        added = sum(1 for l in p.splitlines() if l.startswith("+") and not l.startswith("+++"))
-        removed = sum(1 for l in p.splitlines() if l.startswith("-") and not l.startswith("---"))
-        print("  %-40s +%-4d -%-4d  -> %-34s [android]" % (rel, added, removed, name))
-        made += 1
 
     with open(os.path.join(outdir, "markers.txt"), "w", encoding="utf-8", newline="\n") as f:
         f.write("# 自动生成，请勿手工编辑（由 src/pc/djui_modern/tools/make_patches.py 产出）。\n")

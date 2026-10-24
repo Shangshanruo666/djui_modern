@@ -1,0 +1,22 @@
+diff --git a/src/pc/djui/djui_hud_utils.c b/src/pc/djui/djui_hud_utils.c
+--- a/src/pc/djui/djui_hud_utils.c
++++ b/src/pc/djui/djui_hud_utils.c
+@@ -12,6 +12,8 @@
+ #include "djui_gfx.h"
+ #include "gfx_dimensions.h"
+ #include "config.h"
++
++void djui_modern_note_font_size(f32 size);
+ #include "djui.h"
+ #include "djui_unicode.h"
+ #include "djui_hud_utils.h"
+@@ -122,6 +124,9 @@ static void djui_hud_position_translate(f32* x, f32* y) {
+ static void djui_hud_size_translate(f32* size) {
+     if (sHudUtilsState.resolution == RESOLUTION_DJUI) {
+         djui_gfx_size_translate(size);
++    } else {
++        // HUD 文字不经过 djui_gfx_size_translate，仍需上报原始字号。
++        djui_modern_note_font_size(*size);
+     }
+ }
+ 

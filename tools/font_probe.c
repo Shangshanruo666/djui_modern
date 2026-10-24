@@ -21,7 +21,7 @@
 #include <math.h>
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "../stb_truetype.h"
+#include <stb/stb_truetype.h>
 
 // 抽样：ASCII、常用汉字、以及按 Unicode 排序很靠后的常用字
 static const int kProbes[] = {

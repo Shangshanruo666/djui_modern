@@ -1,0 +1,36 @@
+diff --git a/src/pc/djui/djui_gfx.c b/src/pc/djui/djui_gfx.c
+--- a/src/pc/djui/djui_gfx.c
++++ b/src/pc/djui/djui_gfx.c
+@@ -16,6 +16,18 @@ const Gfx dl_djui_display_list_begin[] = {
+     gsSPEndDisplayList(),
+ };
+ 
++// djui_modern 未参与编译时的空实现。
++#if defined(__GNUC__)
++__attribute__((weak))
++#endif
++void djui_modern_note_font_size(f32 size) { (void)size; }
++
++// 字面量同上：记录当前文字所属的控件。
++#if defined(__GNUC__)
++__attribute__((weak))
++#endif
++void djui_modern_note_text_base(struct DjuiBase* base) { (void)base; }
++
+ const Gfx dl_djui_display_list_end[] = {
+     gsSPTextureAddrDjui(0),
+     gsSPEndDisplayList(),
+@@ -272,9 +284,13 @@ void djui_gfx_size_translate(f32* size) {
+     gfx_get_dimensions(&windowWidth, &windowHeight);
+ 
+     *size = *size * ((f32)SCREEN_HEIGHT / (f32)windowHeight) * djui_gfx_get_scale();
++
++    djui_modern_note_font_size(*size);
+ }
+ 
+ bool djui_gfx_add_clipping_specific(struct DjuiBase* base, f32 dX, f32 dY, f32 dW, f32 dH) {
++    djui_modern_note_text_base(base);
++
+     struct DjuiBaseRect* clip = &base->clip;
+ 
+     f32 clipX2 = clip->x + clip->width;

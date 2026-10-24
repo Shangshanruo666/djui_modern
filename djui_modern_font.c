@@ -268,9 +268,9 @@ static bool install_slot(s32 slot) {
 void djui_modern_font_install(void) {
     if (sInstalled) { return; }
     sInstalled = true;
-    Printf("djui_modern: font install enabled=%d slots=%u\n",
-           (int)gDjuiModernConfig.fontEnabled,
-           gDjuiModernConfig.fontSlotCount);
+    LOG_INFO("djui_modern: font install enabled=%d slots=%u",
+             (int)gDjuiModernConfig.fontEnabled,
+             gDjuiModernConfig.fontSlotCount);
 
     if (!gDjuiModernConfig.fontEnabled) {
         LOG_INFO("djui_modern: TTF fonts disabled by config");
@@ -294,7 +294,7 @@ void djui_modern_font_install(void) {
 }
 
 /* 由 djui_modern.c 的生命周期钩子调用。 */
-void djui_modern_font_relinquish(void) {
+static void djui_modern_font_relinquish(void) {
     // 还原 gDjuiFonts 指针并释放槽位数据。
     for (s32 i = 0; i < (s32)(sizeof(sSlots) / sizeof(sSlots[0])); i++) {
         if (sSlots[i].legacy != NULL && sSlots[i].slot >= 0) {

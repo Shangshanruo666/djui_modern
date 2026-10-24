@@ -1,34 +1,26 @@
 diff --git a/src/pc/djui/djui_panel_host_mods.c b/src/pc/djui/djui_panel_host_mods.c
 --- a/src/pc/djui/djui_panel_host_mods.c
 +++ b/src/pc/djui/djui_panel_host_mods.c
-@@ -20,7 +20,12 @@
+@@ -20,7 +20,8 @@
  #define MOD_CATEGORY_START 2
  
  static struct DjuiFlowLayout* sModLayout = NULL;
 -static struct DjuiThreePanel* sDescriptionPanel = NULL;
-+/*
-+ * mod 描述面板（右侧那块）。**非 static**：djui_modern 要拿它判断
-+ * "这个文字节点是不是 mod 描述"，以套用 `font_mod_description` 配置。
-+ * 见 djui_modern.c 的"文字节点的字体策略"。
-+ */
++// djui_modern 通过该指针识别描述面板的文字节点。
 +struct DjuiThreePanel* gDjuiHostModsDescriptionPanel = NULL;
  static struct DjuiText* sTooltip = NULL;
  static struct DjuiPaginated* sModPaginated = NULL;
  static struct DjuiButton* sBackButton = NULL;
-@@ -52,6 +57,12 @@ static void djui_panel_host_mods_description_create(void) {
+@@ -52,6 +53,8 @@ static void djui_panel_host_mods_description_create(void) {
      f32 bodyHeight = 1000;
  
      struct DjuiThreePanel* panel = djui_three_panel_create(&gDjuiRoot->base, 64, bodyHeight, 0);
-+    /*
-+     * ⚠ 必须在创建描述文字**之前**赋值：`djui_modern_note_text_created()`
-+     * （在 `djui_text_create()` 里调用）要靠它判断"这个文字是不是 mod 描述"，
-+     * 以套用 `font_mod_description` 配置。
-+     */
++    // 必须先于描述文字创建，供 djui_modern 识别节点所属面板。
 +    gDjuiHostModsDescriptionPanel = panel;
      struct DjuiThreePanelTheme theme = gDjuiThemes[configDjuiTheme]->threePanels;
  
      djui_base_set_alignment(&panel->base, DJUI_HALIGN_RIGHT, DJUI_VALIGN_CENTER);
-@@ -78,7 +89,6 @@ static void djui_panel_host_mods_description_create(void) {
+@@ -78,7 +81,6 @@ static void djui_panel_host_mods_description_create(void) {
          djui_text_set_drop_shadow(description, 64, 64, 64, 100);
          sTooltip = description;
      }
@@ -36,7 +28,7 @@ diff --git a/src/pc/djui/djui_panel_host_mods.c b/src/pc/djui/djui_panel_host_mo
  }
  
  static void djui_mod_checkbox_on_hover(struct DjuiBase* base) {
-@@ -127,9 +137,9 @@ static void djui_panel_host_mods_destroy(struct DjuiBase* base) {
+@@ -127,9 +129,9 @@ static void djui_panel_host_mods_destroy(struct DjuiBase* base) {
      struct DjuiThreePanel* threePanel = (struct DjuiThreePanel*)base;
      free(threePanel);
  

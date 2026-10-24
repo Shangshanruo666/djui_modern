@@ -1,13 +1,10 @@
 diff --git a/src/pc/djui/djui_rect.c b/src/pc/djui/djui_rect.c
 --- a/src/pc/djui/djui_rect.c
 +++ b/src/pc/djui/djui_rect.c
-@@ -1,10 +1,39 @@
+@@ -1,10 +1,18 @@
  #include "djui.h"
  
-+/*
-+ * djui_modern 未参与编译时的空兜底（见 djui_rect.h 的说明）。
-+ * djui_modern 存在时，它自己的强符号会在链接期覆盖本定义。
-+ */
++// djui_modern 未参与编译时的空实现。
 +#if defined(__GNUC__)
 +__attribute__((weak))
 +#endif
@@ -18,24 +15,6 @@ diff --git a/src/pc/djui/djui_rect.c b/src/pc/djui/djui_rect.c
  ////////////
  
  bool djui_rect_render(struct DjuiBase* base) {
-+    /*
-+     * ── djui_modern 单点接管 ──
-+     *
-+     * 本函数是全工程**唯一**画矩形填充的地方：聊天消息背景、聊天栏底板、
-+     * 输入框背景、弹窗背景、分页容器、三段面板背景、fps/ctx 浮层、lua
-+     * profiler，共 9 处直调（另加控件自身经 base->render 的调用），全部
-+     * 汇聚到这里。因此在函数入口转一次，9 处**全部自动**走现代化实现，
-+     * 无需逐个包 wrapper —— 这正是"只改 1 处"的全部秘密。
-+     *
-+     * 与"在调用点外部包 wrapper 并把 base->color.a 置 0"的旧做法相比，
-+     * 这里的本质区别是：**我们是在原版设好颜色之后才被调用的**，读到的
-+     * base->color / base->gradient 就是原版本帧真正要用的值。因此：
-+     *   · 原版的淡出（聊天消息随生命周期降低 alpha）**原样生效**；
-+     *   · 不会出现"原版方角 + 我们圆角"的双重绘制。
-+     *
-+     * 未启用 djui_modern（或模块未参与编译）时返回 false，原版实现照常执行，
-+     * 行为与改动前完全一致。返回 true 表示本次已由现代化实现绘制完毕。
-+     */
 +    if (djui_modern_rect_override(base)) { return true; }
 +
      struct DjuiBaseRect* clip = &base->clip;

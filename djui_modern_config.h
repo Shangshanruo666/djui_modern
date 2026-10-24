@@ -37,13 +37,12 @@ struct DjuiModernConfig {
     // 字体缺少字偶间距数据时使用内置兜底。
     bool  fontFallbackKerning;
     // 替换字体槽：
-    // 0 正文，1 标题艺术字，2 HUD，3 ALIASED，
-    // 4 custom HUD，5 recolor HUD，6 special。
+    // 0=Normal（DJUI 常规字体） 1=Title（DJUI 标题字体） 2=HUD 3=Aliased（DJUI 锐利字体）
+    // 4=CustomHUD 5=RecolorHUD 6=Special
     u8    fontSlots[8];
     u8    fontSlotCount;
     // true：现代彩色 Emoji；false：原版 Emoji。
     bool  emojiModern;
-
     // 字形光栅尺寸倍率；不改变排版尺寸。
     f32   textScale;
 

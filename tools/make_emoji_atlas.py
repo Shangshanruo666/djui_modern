@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""把彩色 Emoji 字体烘焙成 RGBA 图集和码点查找表。
+"""把彩色 emoji 字体里的位图烘焙成一张 RGBA 图集 + 一张码点查找表，供 djui_modern 内嵌。
 
 用法:
     python src/pc/djui_modern/tools/make_emoji_atlas.py <emoji字体> <输出头文件> [--size 64]
 
-字符范围
+收录范围
 --------
 A. 汉化版 `src/pc/djui/emoji_glyphs.h` 里的全部 emoji
 B. 小黄脸系列：Emoticons(U+1F600-1F64F)、补充表情(U+1F910-1F92F、
@@ -14,10 +14,16 @@ C. 骷髅 / 鬼 / 外星人 / 恶魔 / 小丑 / 大脑 / 骨牙耳鼻脚（U+1F4
 D. 手势系列：U+1F440-1F450、U+1F590-1F596、U+1F918-1F91F、U+1F932-1F933
 E. 国旗（可选，用 `--flags <国旗字体>` 另给一份）
 
-图集尺寸限制
+图集边长限制
 ------------
-`Vtx.tc` 使用 signed 16-bit S10.5 定点，图集边长不能超过 1023 texel。
-Emoji 与国旗分别生成一张 512x512 图集：
+N64 的 `Vtx.tc` 是 **signed 16-bit 的 S10.5 定点**（纹素 << 5），
+可表达的最大正值是 32767 ⇒ **边长 ≤ 32767/32 = 1023 texel**。
+边长 1024 就已经溢出 1（1024<<5 = 32768 → 变成 -32768），CLAMP 到 0 后
+采样会完全错位，表现为单个表情被重复渲染，且宽度各占一半。
+
+所以一张图的 POT 边长最大只能是 **512**；单张 512×512（每格 32）最多
+256 格。emoji(179) + 国旗(251) 一共 430 格装不进一张图 ⇒
+**必须拆成两张独立的 512×512 图集**：
   · emoji 图集 → `djui_modern_emoji_data.h`（含 DIM/LOG2/GRID/TILE 宏）
   · 国旗图集 → `djui_modern_flag_data.h`（布局与前者完全一致，共用同一套宏）
 
@@ -32,7 +38,8 @@ Emoji 与国旗分别生成一张 512x512 图集：
 存储格式
 --------
     `--format png`（默认）：把整张图集编码成 PNG，再以**十六进制字节数组**内嵌。
-    PNG 为无损压缩，运行时使用 stb_image 解码一次。
+    PNG 是无损压缩，彩色 emoji 图集能压到原来的 1/6 左右，编译时间和二进制
+    体积都大幅下降；运行时用 stb_image（gfx_pc.c 已编译了实现）解一次。
     `--format raw`：直接内嵌 RGBA32 字节（兼容旧行为，体积大得多）。
 """
 
@@ -75,7 +82,9 @@ RI_FIRST, RI_LAST = 0x1F1E6, 0x1F1FF   # Regional Indicator A..Z
 
 # ⚠ 图集边长的**硬上限**：N64 `Vtx.tc` 是 signed 16-bit 的 S10.5 定点
 # （纹素 << 5），可表达的最大正值是 32767 ⇒ 边长 ≤ 32767/32 = 1023 texel。
-# 边长上限为 1023 texel。
+# 边长 1024 就已经溢出 1（1024<<5 = 32768 → -32768），会被 CLAMP 到 0，
+# 采样会完全错位，导致单个表情被重复渲染，宽度各占一半。
+# POT 边长因此最大只能是 512。
 MAX_DIM = 1023
 
 
@@ -89,7 +98,18 @@ def _glyph_to_codepoint(font):
 
 
 def collect_flags(font, strike):
-    """从 GSUB 连字表取出国旗：返回 [( (ri1, ri2), glyph ), ...]。"""
+    """从 GSUB 连字表取出国旗：返回 [( (ri1, ri2), glyph ), ...]。
+
+    为什么读连字表而不是读字形名
+    ----------------------------
+    Unicode 国旗 = **两个 Regional Indicator 的序列**（🇨🇳 = U+1F1E8 U+1F1F3），
+    字体里靠 `ccmp` 特性下的一条 LigatureSubst 把它们合成一个旗子字形。
+    也就是说"哪两个字母 = 哪面旗"这条信息**只存在于连字表里**，
+    与字形叫什么名字无关 —— 所以连字表才是唯一权威来源。
+
+    本函数扫全部 lookup，凡是"首字与组件都是 Regional Indicator"的连字都收下；
+    `ExtSubTable`（type 7 扩展）会自动展开。找不到任何连字时返回 None。
+    """
     if "GSUB" not in font:
         return None
     gsub = font["GSUB"].table
@@ -132,7 +152,14 @@ def dedupe_flags(pairs):
     """去重：同一面旗被多个 RI 对命中时只保留**最小键**的那一对（ISO 顺序）。
 
     Returns [(pair, glyph), ...] sorted by key.
-"""
+
+    为何去重（而非保留全部别名）：
+    国旗图集必须装进 ≤1023 texel 的方形图（SIDE 内 Vtx.tc 是 signed 16-bit，
+    最大可寻址 1023 texel；超过则 UV 溢出成负、CLAMP 后采样错位）。
+    拆成两张 512×512 图集后，每张只能装 256 tile —— 179 emoji 占满一张，
+    留给国旗只剩 251 格（去重后） / 259 格（不去重）。为避免溢出，
+    宁可在 8 个**非主流属地代码**上妥协（输入如 "UM" 看不到 US 旗，
+    但输 "US" 正常 —— 因为用的是同一张图）。"""
     from collections import defaultdict
     g2pairs = defaultdict(list)
     for p, g in pairs:
@@ -175,6 +202,14 @@ def _dump_byte_array(blob, per_line=20):
 
 
 def safe_grid(count, size):
+    """返回 (gx, gy)：能装下 count 格、且**两边边长都不超过 S10.5 上限**的 POT 网格。
+
+    ⚠ 这是整个图集的**硬约束**：N64 `Vtx.tc` 是 signed 16-bit 的 S10.5 定点
+    （纹素 << 5），可表达的最大正值是 32767 ⇒ 边长 ≤ 1023 texel。
+    边长 1024 时末尾 tile 的 UV 会溢出成负、被 CLAMP 到 0，采样完全错位
+    （表现为单个表情被重复渲染，且宽度各占一半）。
+    POT 边长因此最大只能是 **512**（1024 差 1 就溢出）。
+    """
     cap = MAX_DIM // size
     if cap < 1:
         return None
@@ -192,20 +227,20 @@ def write_emoji_header(path, cps, blob, blob_kind, atlas_png, size, gx, gy,
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         w = f.write
         w("// ============================================================================\n")
-        w("// 自动生成，请勿手动编辑。\n")
+        w("// 自动生成，请勿手工编辑。\n")
         w("//\n")
         w(f"//   生成命令: {cmd}\n")
         w(f"//   来源字体: {os.path.basename(src_font)} (ppem={src_ppem})\n")
         w("//   授权    : SIL Open Font License 1.1（Noto Emoji）\n")
         w("//\n")
         w(f"// {gx}x{gy} 格，每格 {size}x{size}，整图 {dim_x}x{dim_y} RGBA32。\n")
-        w(f"//   边长 {max(dim_x, dim_y)} ≤ {MAX_DIM}（S10.5 定点上限）。\n")
+        w(f"//   边长 {max(dim_x, dim_y)} ≤ {MAX_DIM}（S10.5 定点上限，见 tools 内注释）。\n")
         w(f"// 图集数据以 {blob_kind} 内嵌（{len(blob)} 字节），"
           f"展开后 {dim_x * dim_y * 4} 字节。\n")
         w("// tile 下标 = 该码点在 sDjuiModernEmojiCodepoints[]（升序）里的下标。\n")
         w(f"// 共 {len(cps)} 个 emoji。\n")
         w("//\n")
-        w("// 收录范围：汉化版 emoji_glyphs.h 全部 + 小黄脸/骷髅/鬼/恶魔等 + 手势系列。\n")
+        w("// 收录范围：原版 emoji_glyphs.h 全部 + 小黄脸/骷髅/鬼/恶魔等 + 手势系列。\n")
         w("// ============================================================================\n\n")
         w("#pragma once\n\n")
         w(f"#define DJUI_MODERN_EMOJI_COUNT {len(cps)}\n")
@@ -240,7 +275,7 @@ def write_flag_header(path, flags, blob, blob_kind, atlas_png, size, gx, gy,
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         w = f.write
         w("// ============================================================================\n")
-        w("// 自动生成，请勿手动编辑。\n")
+        w("// 自动生成，请勿手工编辑。\n")
         w("//\n")
         w(f"//   生成命令: {cmd}\n")
         w(f"//   来源字体: {os.path.basename(src_font)} (ppem={src_ppem})\n")
@@ -337,7 +372,7 @@ def main() -> int:
         if got is None:
             print("error: 国旗字体里没有任何 Regional Indicator 连字 —— 它不是一份国旗字体，"
                   "或子集化时把 GSUB 表删掉了。", file=sys.stderr)
-            print("       请改用 pyftsubset --layout-features='*' 重新子集化，"
+            print("       请使用 pyftsubset --layout-features='*' 重新子集化，"
                   "或直接提供原始字体。", file=sys.stderr)
             return 1
         n_lig = len(got)

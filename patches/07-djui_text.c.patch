@@ -1,0 +1,24 @@
+diff --git a/src/pc/djui/djui_text.c b/src/pc/djui/djui_text.c
+--- a/src/pc/djui/djui_text.c
++++ b/src/pc/djui/djui_text.c
+@@ -534,6 +534,12 @@ static void djui_text_destroy(struct DjuiBase* base) {
+     free(text);
+ }
+ 
++// djui_modern 未参与编译时的空实现。
++#if defined(__GNUC__)
++__attribute__((weak))
++#endif
++void djui_modern_note_text_created(struct DjuiText* text) { (void)text; }
++
+ struct DjuiText* djui_text_create(struct DjuiBase* parent, const char* message) {
+     struct DjuiText* text = calloc(1, sizeof(struct DjuiText));
+     struct DjuiBase* base = &text->base;
+@@ -547,5 +553,7 @@ struct DjuiText* djui_text_create(struct DjuiBase* parent, const char* message)
+     djui_text_set_alignment(text, DJUI_HALIGN_LEFT, DJUI_VALIGN_TOP);
+     djui_text_set_drop_shadow(text, 0, 0, 0, 0);
+ 
++    djui_modern_note_text_created(text);
++
+     return text;
+ }

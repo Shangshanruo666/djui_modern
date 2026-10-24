@@ -1,83 +1,140 @@
 <div align="center">
-  # djui_modern
 
-  **适用于 sm64coopdx 的自包含现代化 DJUI 皮肤层。**
+# djui_modern
 
-  [English](./README.en.md) | 简体中文
+**适用于 sm64coopdx 的现代化 DJUI 外观模块。**
 
-  <br />
+简体中文 | [English](./README.en.md)
 
-  <img alt="sm64coopdx" src="https://img.shields.io/badge/sm64coopdx-supported-1f6feb?style=flat-square" />
-  <img alt="DJUI skin" src="https://img.shields.io/badge/DJUI-skin-7c3aed?style=flat-square" />
-  <img alt="TTF and OTF" src="https://img.shields.io/badge/fonts-TTF%20%7C%20OTF-2ea043?style=flat-square" />
-  <img alt="Desktop" src="https://img.shields.io/badge/desktop-Windows%20%7C%20macOS%20%7C%20Linux-0078d4?style=flat-square" />
-  <img alt="Android" src="https://img.shields.io/badge/Android-supported-3ddc84?style=flat-square&logo=android&logoColor=white" />
+<img alt="sm64coopdx" src="https://img.shields.io/badge/sm64coopdx-supported-1f6feb?style=flat-square" />
+<img alt="DJUI skin" src="https://img.shields.io/badge/DJUI-skin-7c3aed?style=flat-square" />
+<img alt="TTF and OTF" src="https://img.shields.io/badge/fonts-TTF%20%7C%20OTF-2ea043?style=flat-square" />
+<img alt="Desktop" src="https://img.shields.io/badge/desktop-Windows%20%7C%20macOS%20%7C%20Linux-0078d4?style=flat-square" />
+<img alt="Android" src="https://img.shields.io/badge/Android-supported-3ddc84?style=flat-square&logo=android&logoColor=white" />
+
 </div>
 
 ## 关于
 
-djui_modern 是一个面向 sm64coopdx 的开源外观层。它把 DJUI 的平面矩形填充替换为圆角、半透明界面，同时保留原版的布局、输入、裁剪逻辑与 `djui_*` Lua 接口。
+djui_modern 是面向 sm64coopdx 的外观层。它将 DJUI 的平面矩形填充替换为圆角、
+半透明表面，并可为普通文字提供 TTF/OTF 字体、彩色 Emoji 和国旗支持。
 
-项目优先考虑上游可移植性和 Mod 兼容性。模块只在 `djui_rect_render()` 这一处接管共享矩形绘制原语；字体后端则按需把普通文字换成高分辨率 TTF/OTF，并提供内嵌现代 Emoji 图集。模块缺席或关闭时，原版渲染器会继续接管。
+布局、输入、裁剪和 `djui_*` Lua 接口继续由原版 DJUI 负责。模块缺席或关闭时，
+原版渲染器会接管，因此现有 Mod 无需专门适配。
 
 ## 功能
 
-- 让菜单、按钮、输入框、滑条、聊天栏、弹窗和 HUD 表面统一使用现代圆角外观。
-- 跟随当前 DJUI 主题，并保留悬停、按下、禁用和覆盖层的原版配色。
-- 支持 TTF/OTF 矢量字体、内置中文字体和 Emoji，也支持更换自定义字体。
-- 保留原版 DJUI 布局、操作方式和 Mod 兼容性。
-- 为桌面与 Android 源码树提供幂等、带标记校验的安装脚本。
-- 通过首次启动自动生成的 `djui_modern.cfg` 调整外观与字体。
+- 菜单、按钮、输入框、滑条、聊天栏、弹窗和浮层使用统一的圆角外观。
+- 沿用当前 DJUI 主题，以及控件自身的悬停、按下、禁用和淡出颜色。
+- 支持 TTF/OTF 字体、内嵌中文与西文字体、彩色 Emoji 和国旗。
+- 保留 DJUI 布局、操作方式和 Lua 接口行为。
+- 桌面与 Android 共用同一套模块代码和补丁生成流程。
+- 通过首次启动生成的 `djui_modern.cfg` 调整外观和字体。
 
 ## 安装
 
-安装脚本要求目标为包含 `Makefile`、`src/pc/djui/` 和 `src/pc/pc_main.c` 的 sm64coopdx 源码树。
+安装脚本要求目标是 sm64coopdx 源码树，并至少包含以下内容：
 
-```bash
-# 桌面：Windows、macOS 或 Linux
-sh src/pc/djui_modern/install.sh
+- `Makefile`
+- `src/pc/djui/`
+- `src/pc/djui/djui.c`
+- `src/pc/pc_main.c`
+
+在模块仓库中执行：
+
+```sh
+# 桌面
+sh install.sh --root /path/to/sm64coopdx
 
 # Android
-sh src/pc/djui_modern/install-android.sh
+sh install.sh --android --root /path/to/sm64coopdx
 ```
 
-脚本会把本目录挂载为 `src/pc/djui_modern`，应用已登记的原版改动，并跳过已经安装的补丁。常用参数：
+安装器会把模块挂载到 `src/pc/djui_modern`，并应用对应的原版补丁。需要指定模块
+仓库地址时：
+
+```sh
+sh install.sh --root /path/to/sm64coopdx --url <仓库地址>
+```
+
+常用参数：
 
 | 参数 | 作用 |
 | --- | --- |
+| `--android` | 使用 Android 检查和补丁 |
 | `--root <目录>` | 指定 sm64coopdx 源码树 |
-| `--url <仓库地址>` | 指定挂载子模块时使用的仓库 |
-| `--no-submodule` | 模块已经就位时，只应用补丁 |
+| `--url <地址>` | 指定挂载子模块时使用的仓库地址 |
+| `--no-submodule` | 不操作 git，只检查或应用补丁 |
 | `--dry-run` | 只检查补丁兼容性，不写入文件 |
-| `--revert` | 反向应用补丁，同时保留模块目录 |
+| `--revert` | 反向应用补丁 |
+| `-h`, `--help` | 显示安装器帮助 |
 
-安装完成后，在源码树根目录执行 `make`。
+安装完成后，在源码树根目录执行：
+
+```sh
+make
+```
 
 ## 配置
 
-首次启动时，djui_modern 会在桌面端可执行文件旁、或 Android 游戏数据目录中生成 `djui_modern.cfg`。修改后需重启游戏；模块更新时，缺失的配置项会自动补全。
+首次启动时，模块会生成 `djui_modern.cfg`：
 
-### 自定义字体
+- 桌面端：与 `sm64coopdx` 可执行文件同级。
+- Android：与 `dynos/`、`mods/` 同级的游戏数据目录。
 
-把 `.ttf` 或 `.otf` 文件放进 coopdx 的数据目录（即 djui_modern.cfg 所在目录），或用 `font_path` 指向具体文件。外部字体在运行时加载，并作为字体链的第一项；字体缺字时会自动使用默认字体。
+修改配置后需要重启游戏。模块升级时，缺失的配置项会自动追加，已有值不会被重写。
 
-内嵌字体与 Emoji 图集采用 SIL Open Font License 1.1。来源与再生成方式见[字体说明](./font/README.md)，完整条款见[授权文本](./font/OFL.txt)。
+| 配置项 | 默认值 | 作用 |
+| --- | --- | --- |
+| `enabled` | `true` | 是否启用模块 |
+| `radius_panel` | `12` | 大面板圆角，使用 320x240 DJUI 坐标 |
+| `radius_element` | `8` | 普通控件圆角 |
+| `radius_pill` | `-1` | 胶囊圆角；负值表示高度的一半 |
+| `corner_roundness` | `0.90` | 圆角过渡形状 |
+| `panel_alpha` | `244` | 面板不透明度 |
+| `element_alpha` | `208` | 控件不透明度 |
+| `overlay_alpha` | `176` | 浮层不透明度 |
+| `gradients` | `true` | 是否启用轻微渐变 |
+| `show_borders` | `true` | 是否绘制圆角边框 |
+| `font_enabled` | `true` | 是否启用矢量字体 |
+| `font_path` | 空 | 自定义字体文件路径 |
+| `font_slots` | `0 3` | 替换的 DJUI 字体槽 |
+| `emoji` | `modern` | `modern` 使用模块图集，`vanilla` 使用原版贴图 |
+| `text_scale` | `1.0` | 字形光栅倍率，不改变排版尺寸 |
 
-## 技术手册
+完整配置项、字体槽含义和内部行为见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
-开发时 AI 写的中文手册在 [DEVELOPMENT.md](./DEVELOPMENT.md)，其中包含上游移植表、精确补丁位置、圆角几何、纹理策略、字体流水线、验证记录与已知限制。（AI 写的东西非常美味，确保你能看下去）
+## 自定义字体
+
+可以通过 `font_path` 指定 `.ttf` 或 `.otf` 文件，也可以把字体放入以下位置：
+
+```text
+<游戏目录>/djui_modern/*.ttf
+<游戏目录>/djui_modern/*.otf
+<游戏目录>/*.ttf
+<游戏目录>/*.otf
+```
+
+外部字体作为字体链首项加载；缺少字形时，内嵌西文、中文和星形字体继续提供回退字形。
+字体来源、子集范围和重新生成方法见 [font/README.md](./font/README.md)。
+
+## 文档
+
+- [开发与维护](./DEVELOPMENT.md)：集成方式、补丁生成、渲染约束和验证流程。
+- [架构与接口](./ARCHITECTURE.md)：模块边界、接口清单和数据流。
 
 ## 参与贡献
 
-修改前，请保持以下边界：
+修改模块时请保持以下边界：
 
-- 不改变 DJUI 的布局、输入、裁剪与 Lua 行为。
-- 只修改模块本身以及文档登记过的上游补丁面。
-- 钩子发生变化时，同时验证桌面与 Android 两个源码分支。
-- 始终保留原版渲染器作为自动回退路径。
+- 不改变 DJUI 的布局、输入、裁剪或 Lua 行为。
+- 优先在 `src/pc/djui_modern` 内实现功能。
+- 只修改已登记的上游钩子，并同步重新生成桌面和 Android 补丁。
+- 修改钩子后分别验证两个平台分支。
 
-## 开源协议
+## 许可
 
-本项目代码基于 [MIT License](./LICENSE) 开源。
+模块代码使用 [MIT License](./LICENSE)。
 
-内嵌的 Roboto Condensed、Source Han Sans SC 与 Noto Emoji 数据采用 [SIL Open Font License 1.1](./font/OFL.txt)。
+内嵌的 Roboto Condensed、Source Han Sans SC、Power Star 和 Noto Emoji 数据使用
+[SIL Open Font License 1.1](./font/OFL.txt)。

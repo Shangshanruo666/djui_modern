@@ -1,0 +1,23 @@
+diff --git a/src/pc/djui/djui_unicode.c b/src/pc/djui/djui_unicode.c
+--- a/src/pc/djui/djui_unicode.c
++++ b/src/pc/djui/djui_unicode.c
+@@ -375,10 +375,19 @@ size_t djui_unicode_len(char* text) {
+     return len;
+ }
+ 
++// djui_modern 未参与编译时的空实现。
++#if defined(__GNUC__)
++__attribute__((weak))
++#endif
++bool djui_modern_unicode_accepts(const char* text) { (void)text; return false; }
++
+ bool djui_unicode_valid_char(const char* text) {
+     if ((u8)*text < 128) {
+         return ((u8)*text >= ' ');
+     }
++    if (djui_modern_unicode_accepts(text)) {
++        return true;
++    }
+     u64 key = convert_unicode_char_to_u64(text);
+     struct SmCodeGlyph* glyph = hmap_get(sCharMap, key);
+     return glyph != NULL;

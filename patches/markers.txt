@@ -5,15 +5,10 @@
 01-Makefile.android.patch|Makefile|SRC_DIRS += src/pc src/pc/gfx src/pc/audio src/pc/controller src/pc/fs src/pc/fs/packtypes src/pc/mods src/pc/dev src/pc/network src/pc/network/packets src/pc/network/socket src/pc/network/coopnet src/pc/utils src/pc/utils/miniz src/pc/djui src/pc/djui_modern src/pc/lua src/pc/lua/utils src/pc/os|android
 02-djui.c.patch|src/pc/djui/djui.c|#include "pc/djui_modern/djui_modern.h"|desktop
 02-djui.c.android.patch|src/pc/djui/djui.c|#include "pc/djui_modern/djui_modern.h"|android
-03-djui_rect.c.patch|src/pc/djui/djui_rect.c|* djui_modern 未参与编译时的空兜底（见 djui_rect.h 的说明）。|any
-04-djui_rect.h.patch|src/pc/djui/djui_rect.h|* djui_modern 矩形渲染接管点。|any
-05-djui_gfx.c.patch|src/pc/djui/djui_gfx.c|* djui_modern 未参与编译时的空兜底（见 djui_gfx.h 的说明）。|any
-06-djui_gfx.h.patch|src/pc/djui/djui_gfx.h|* djui_modern 字体模块的"字号记录点"。|any
-07-djui_unicode.c.patch|src/pc/djui/djui_unicode.c|* djui_modern 未参与编译时的空兜底（见 djui_modern_font_atlas.h 的说明）。|any
-08-djui_text.c.patch|src/pc/djui/djui_text.c|* djui_modern 未参与编译时的空兜底（见 djui_text.h 的说明）。|any
-09-djui_text.h.patch|src/pc/djui/djui_text.h|* djui_modern 未参与编译时的空兜底（见 djui_modern_font.h 的"字体槽查询"）。|any
-10-djui_panel_host.c.patch|src/pc/djui/djui_panel_host.c|// 原版此处漏了投影（同面板的 PORT / 存档槽位 两个标签都有），补上以保持一致|any
-11-djui_panel_host_mods.c.patch|src/pc/djui/djui_panel_host_mods.c|* mod 描述面板（右侧那块）。**非 static**：djui_modern 要拿它判断|any
-12-djui_panel_host_mods.h.patch|src/pc/djui/djui_panel_host_mods.h|* mod 描述面板（右侧那块）。**非 static**：djui_modern 用它判断|any
-13-gfx_dxgi.cpp.patch|src/pc/gfx/gfx_dxgi.cpp|* 把 WM_CHAR 送来的 UTF-16 code unit 转成 UTF-8 交给上层。|any
-14-Android.mk.android.patch|Android.mk|src/pc/djui_modern|android
+03-djui_rect.c.patch|src/pc/djui/djui_rect.c|// djui_modern 未参与编译时的空实现。|any
+04-djui_gfx.c.patch|src/pc/djui/djui_gfx.c|// djui_modern 未参与编译时的空实现。|any
+05-djui_hud_utils.c.patch|src/pc/djui/djui_hud_utils.c|void djui_modern_note_font_size(f32 size);|any
+06-djui_unicode.c.patch|src/pc/djui/djui_unicode.c|// djui_modern 未参与编译时的空实现。|any
+07-djui_text.c.patch|src/pc/djui/djui_text.c|// djui_modern 未参与编译时的空实现。|any
+08-djui_panel_host_mods.c.patch|src/pc/djui/djui_panel_host_mods.c|// djui_modern 通过该指针识别描述面板的文字节点。|any
+09-gfx_dxgi.cpp.patch|src/pc/gfx/gfx_dxgi.cpp|// 将 WM_CHAR 的 UTF-16 输入转换为 UTF-8，并合并代理对。|any

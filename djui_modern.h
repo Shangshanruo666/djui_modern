@@ -1,17 +1,15 @@
 #pragma once
 
-/* djui_modern 公共接口。 */
-
 #include "pc/djui/djui.h"
 
-/* 初始化。在 djui_init() 开头调用一次，需晚于 gfx 初始化。 */
+// 在 DJUI 首次创建文字节点前调用。
 void djui_modern_init(void);
 
-/* 每帧渲染前重置顶点池并应用主题。 */
+// 在 DJUI 每帧绘制前调用。
 void djui_modern_pre_render(void);
 
-/* 每帧渲染后的诊断钩子。 */
+// 在 DJUI 每帧绘制后调用。
 void djui_modern_post_render(void);
 
-/* 释放字体与图集资源。 */
+// 在 DJUI 关闭时调用。
 void djui_modern_shutdown(void);

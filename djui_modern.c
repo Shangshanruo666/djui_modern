@@ -1,7 +1,6 @@
 #include <math.h>
 #include <string.h>
 #include "pc/djui/djui.h"
-#include "pc/djui/djui_hud_utils.h"
 #include "pc/djui/djui_console.h"
 // 面板指针，用于判断文字节点所属面板。
 #include "pc/djui/djui_panel_playerlist.h"
@@ -16,18 +15,8 @@
 #include "pc/debuglog.h"
 #include "engine/math_util.h"
 
-/* 由 djui_modern_font.c 提供 */
-void djui_modern_font_install(void);
-
 /* 上游 mod 描述面板指针；未创建时为 NULL。 */
 extern struct DjuiThreePanel* gDjuiHostModsDescriptionPanel;
-
-/*
- * 主模块：接管矩形渲染、应用主题色并安装字体。
- * 上游移植和补丁细节见 DEVELOPMENT.md。
- */
-
-// 状态
 
 static bool sEnabled = false;
 
@@ -267,11 +256,11 @@ static void themed_sweep(void) {
 /*
  * 原版是否在上一帧之后主动改写过这个控件的 alpha？
  *
- * 判据：base->color.a != 我们上次写进去的值。
- * 相等表示"自我们上次写入以来无人动过"（幂等），不等表示原版动过。
+ * 判据：base->color.a 与模块上次写入的值是否不同。
+ * 相等表示模块写入后未被修改，不等表示原版或其他代码更新过该值。
  *
- * 注意：只有"整块颜色"由我们接管的方案才需要这个检测；SCHEME_ELEM 的
- * 颜色本来就每帧现算（hover/按下），不依赖原版 alpha，故不参与。
+ * 只有整块颜色由模块接管的方案需要此检测。SCHEME_ELEM 的颜色每帧根据
+ * hover 和按下状态计算，不依赖原版 alpha，因此不参与检测。
  */
 static bool native_alpha_changed(struct DjuiBase* base, s32 idx) {
     if (base == NULL || idx < 0 || idx >= (s32)sThemedCount) { return false; }
@@ -692,7 +681,7 @@ static void modern_theme_and_adopt(struct DjuiBase* base, u32 depth) {
 }
 
 /* 遍历包含矩形控件的两棵 UI 树。 */
-void djui_modern_theme_pass(void) {
+static void djui_modern_theme_pass(void) {
     if (!sEnabled) { return; }
 
     // 清理已销毁节点的记录。

@@ -56,7 +56,7 @@ static void djui_modern_config_defaults(void) {
     gDjuiModernConfig.fontPlayerList     = false;
     gDjuiModernConfig.fontModDescription = false;
 
-    // 默认替换正文槽 0 与 ALIASED 槽 3。
+    // 默认替换槽 0（Normal）与槽 3（Aliased）。
     {
         static const u8 kDefaultFontSlots[] = { 0, 3 };
         memcpy(gDjuiModernConfig.fontSlots, kDefaultFontSlots, sizeof(kDefaultFontSlots));
@@ -122,9 +122,6 @@ static void apply_kv(const char* key, const char* value) {
         gDjuiModernConfig.gradientBotScale = (f32)atof(value);
     } else if (!strcasecmp(key, "show_borders")) {
         gDjuiModernConfig.showBorders = parse_bool(value, gDjuiModernConfig.showBorders);
-    } else if (!strcasecmp(key, "keep_borders")) {
-        // 兼容旧键。
-        gDjuiModernConfig.showBorders = parse_bool(value, gDjuiModernConfig.showBorders);
     } else if (!strcasecmp(key, "font_enabled")) {
         gDjuiModernConfig.fontEnabled = parse_bool(value, gDjuiModernConfig.fontEnabled);
     } else if (!strcasecmp(key, "font_path")) {
@@ -160,7 +157,6 @@ static void apply_kv(const char* key, const char* value) {
     } else if (!strcasecmp(key, "show_stats")) {
         gDjuiModernConfig.showStats = parse_bool(value, gDjuiModernConfig.showStats);
     }
-    // 已删除的旧键会被忽略。
 }
 
 /* 配置文件路径、默认生成与缺失项补全。 */
@@ -258,10 +254,10 @@ static const char kDefaultCfgText[] =
 "font_fallback_kerning = true\n"
 "\n"
 "# 用 TTF 替换哪些字体槽：\n"
-"#   0=正文/按钮/聊天   1=FONT_MENU (DJUI 标题字体)   2=HUD   3=ALIASED(DJUI 锐利字体)\n"
-"#   4=custom HUD       5=recolor HUD  6=special\n"
+"#   0=Normal（DJUI 常规字体） 1=Title（DJUI 标题字体） 2=HUD 3=Aliased（DJUI 锐利字体）\n"
+"#   4=CustomHUD 5=RecolorHUD 6=Special\n"
 "#\n"
-"# 默认替换常规文字槽 0 与 ALIASED 槽 3。\n"
+"# 默认替换槽 0（Normal）与槽 3（Aliased）。\n"
 "font_slots = 0 3\n"
 "\n"
 "# Emoji 样式：\n"
@@ -389,31 +385,7 @@ static s32 config_append_missing(const char* path, const char* seenKeys) {
         lineCount++;
     }
 
-    // 输出缓冲上界：模板全文加补全说明。
-    const size_t cap = strlen(kDefaultCfgText) + 1024;
-    char* out = (char*)malloc(cap);
-    if (out == NULL) { return 0; }
-    size_t outLen = 0;
-    s32 addedKeys = 0;
-    bool headerWritten = false;
-
-    #define CFG_EMIT_RANGE(s, e) do {                            \
-        const size_t _n = (size_t)((e) - (s));                   \
-        if (outLen + _n + 2 < cap) {                             \
-            memcpy(out + outLen, (s), _n);                       \
-            outLen += _n;                                        \
-            out[outLen++] = '\n';                                \
-            out[outLen] = '\0';                                  \
-        }                                                        \
-    } while (0)
-    #define CFG_EMIT_LIT(lit) do {                               \
-        const char* _s = (lit);                                  \
-        CFG_EMIT_RANGE(_s, _s + strlen(_s));                     \
-    } while (0)
-    #define CFG_EMIT_NL() do {                                   \
-        if (outLen + 1 < cap) { out[outLen++] = '\n'; out[outLen] = '\0'; } \
-    } while (0)
-
+    s32 missingKeys = 0;
     s32 i = 0;
     while (i < lineCount) {
         if (cfg_line_is_blank(lines[i].start, lines[i].end)) { i++; continue; }
@@ -426,59 +398,64 @@ static s32 config_append_missing(const char* path, const char* seenKeys) {
             i++;
         }
 
-        // 统计当前块的缺失键。
-        s32 keyCount = 0, missingCount = 0;
         for (s32 k = blkBegin; k <= blkEnd; k++) {
             const char* key;
             const size_t kl = cfg_line_key(lines[k].start, lines[k].end, &key);
             if (kl == 0) { continue; }
-            keyCount++;
-            if (!cfg_seen_has(seenKeys, key, kl)) { missingCount++; }
+            if (!cfg_seen_has(seenKeys, key, kl)) { missingKeys++; }
         }
-        if (keyCount == 0 || missingCount == 0) { continue; }
+    }
+    if (missingKeys == 0) { return 0; }
 
-        if (!headerWritten) {
-            headerWritten = true;
-            CFG_EMIT_NL();
-            CFG_EMIT_LIT("# ---------------- 自动补全的配置项 ----------------");
-            CFG_EMIT_LIT("# 以下是本文件里缺失、已由程序按当前版本补全的项（含说明注释）。");
-            CFG_EMIT_LIT("# 键的先后顺序不影响解析；想归类可以自行剪切到上面的对应小节。");
+    FILE* f = fopen(path, "a");
+    if (f == NULL) {
+        LOG_ERROR("djui_modern: could not append missing options to %s", path);
+        return 0;
+    }
+    if (!cfg_file_ends_with_newline(path)) { fputc('\n', f); }
+    fputs("\n"
+          "# ---------------- 自动补全的配置项 ----------------\n"
+          "# 以下是本文件里缺失、已由程序按当前版本补全的项（含说明注释）。\n"
+          "# 键的先后顺序不影响解析；想归类可以自行剪切到上面的对应小节。\n", f);
+
+    s32 addedKeys = 0;
+    i = 0;
+    while (i < lineCount) {
+        if (cfg_line_is_blank(lines[i].start, lines[i].end)) { i++; continue; }
+        const s32 blkBegin = i;
+        s32 blkEnd = i;
+        i++;
+        while (i < lineCount && !cfg_line_is_blank(lines[i].start, lines[i].end)) {
+            blkEnd = i;
+            i++;
         }
 
-        // 先复制注释，再复制缺失键。
+        s32 missingCount = 0;
         for (s32 k = blkBegin; k <= blkEnd; k++) {
             const char* key;
-            if (cfg_line_key(lines[k].start, lines[k].end, &key) == 0) {
-                CFG_EMIT_RANGE(lines[k].start, lines[k].end);
-            }
+            const size_t kl = cfg_line_key(lines[k].start, lines[k].end, &key);
+            if (kl > 0 && !cfg_seen_has(seenKeys, key, kl)) { missingCount++; }
+        }
+        if (missingCount == 0) { continue; }
+
+        for (s32 k = blkBegin; k <= blkEnd; k++) {
+            const char* key;
+            if (cfg_line_key(lines[k].start, lines[k].end, &key) != 0) { continue; }
+            fwrite(lines[k].start, 1, (size_t)(lines[k].end - lines[k].start), f);
+            fputc('\n', f);
         }
         for (s32 k = blkBegin; k <= blkEnd; k++) {
             const char* key;
             const size_t kl = cfg_line_key(lines[k].start, lines[k].end, &key);
-            if (kl == 0) { continue; }
-            if (cfg_seen_has(seenKeys, key, kl)) { continue; }
-            CFG_EMIT_RANGE(lines[k].start, lines[k].end);
+            if (kl == 0 || cfg_seen_has(seenKeys, key, kl)) { continue; }
+            fwrite(lines[k].start, 1, (size_t)(lines[k].end - lines[k].start), f);
+            fputc('\n', f);
             addedKeys++;
         }
     }
-    #undef CFG_EMIT_RANGE
-    #undef CFG_EMIT_LIT
-    #undef CFG_EMIT_NL
 
-    if (addedKeys > 0) {
-        FILE* f = fopen(path, "a");
-        if (f == NULL) {
-            LOG_ERROR("djui_modern: could not append missing options to %s", path);
-            addedKeys = 0;
-        } else {
-            if (!cfg_file_ends_with_newline(path)) { fputc('\n', f); }
-            fputs(out, f);
-            fclose(f);
-            LOG_INFO("djui_modern: config auto-completed (%d new option(s)) -> %s", addedKeys, path);
-        }
-    }
-
-    free(out);
+    fclose(f);
+    LOG_INFO("djui_modern: config auto-completed (%d new option(s)) -> %s", addedKeys, path);
     return addedKeys;
 }
 
