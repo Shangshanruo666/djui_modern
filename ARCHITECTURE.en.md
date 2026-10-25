@@ -21,7 +21,7 @@ sites.
 | `djui_modern_rrect.c` | Rounded outlines, mask, vertex pool, display lists |
 | `djui_modern_font.c` | `DjuiFont` adapters and font-slot installation |
 | `djui_modern_font_atlas.c` | TTF/OTF rasterization, glyph textures, Emoji, flags |
-| `djui_modern_config.c` | Configuration loading and default-file maintenance |
+| `djui_modern_config.c` | Configuration loading, template rebuild, and value overlay |
 | `djui_modern_gbi.h` | Private display-list macros |
 | `*_data.h` | Generated font, Emoji, and flag data |
 | `font/` | Embedded fonts and license information |

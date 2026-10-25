@@ -102,8 +102,10 @@ On first launch, the module creates `djui_modern.cfg`:
 - Desktop: beside the sm64coopdx executable.
 - Android: in the game data directory beside `dynos/` and `mods/`.
 
-Restart the game after changing the file. Missing options are appended on
-module upgrades; existing values are not rewritten.
+Restart the game after changing the file. On startup the file is compared with
+the built-in template: missing options are restored to their defaults, options
+outside the template are dropped, comments are reset to the template, and
+existing values are kept.
 
 | Option | Default | Purpose |
 | --- | --- | --- |

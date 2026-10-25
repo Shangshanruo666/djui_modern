@@ -280,28 +280,6 @@ static const char kDefaultCfgText[] =
 "# 输出加载信息与每帧渲染统计。排查问题时启用。\n"
 "show_stats = false\n";
 
-/* 文件不存在时写一份带注释的默认配置（与 sm64config.txt 的行为一致）。 */
-static void config_write_default(void) {
-    const char* path = config_path();
-    if (path == NULL) {
-        LOG_ERROR("djui_modern: cannot resolve game directory for djui_modern.cfg");
-        return;
-    }
-    FILE* f = fopen(path, "w");
-    if (f == NULL) {
-        LOG_ERROR("djui_modern: could not write default config to %s", path);
-        return;
-    }
-    fputs(kDefaultCfgText, f);
-    fclose(f);
-    LOG_INFO("djui_modern: wrote default config to %s", path);
-}
-
-// 自动补全缺失的配置项。只追加内容，不修改已有取值。
-
-/* 模板行区间。 */
-struct CfgLine { const char* start; const char* end; };
-
 /* 取下一行 [*pp, ...)，返回 false 表示已到末尾。 */
 static bool cfg_next_line(const char** pp, const char** pstart, const char** pend) {
     const char* p = *pp;
@@ -314,15 +292,7 @@ static bool cfg_next_line(const char** pp, const char** pstart, const char** pen
     return true;
 }
 
-/* 判断空白行。 */
-static bool cfg_line_is_blank(const char* s, const char* e) {
-    for (const char* q = s; q < e; q++) {
-        if (!isspace((unsigned char)*q)) { return false; }
-    }
-    return true;
-}
-
-/* 提取 key = value 中的键名。 */
+/* 提取 key = value 中的配置项名称。 */
 static size_t cfg_line_key(const char* s, const char* e, const char** keyOut) {
     const char* cut = e;
     for (const char* q = s; q < e; q++) {
@@ -342,121 +312,134 @@ static size_t cfg_line_key(const char* s, const char* e, const char** keyOut) {
     return (size_t)(k1 - k0);
 }
 
-/* 检查键名是否已出现。 */
-static bool cfg_seen_has(const char* seen, const char* key, size_t keyLen) {
-    for (const char* p = seen; *p != '\0'; ) {
-        const char* nl = strchr(p, '\n');
-        const char* end = (nl != NULL) ? nl : (p + strlen(p));
-        if ((size_t)(end - p) == keyLen && strncasecmp(p, key, keyLen) == 0) { return true; }
-        if (nl == NULL) { break; }
-        p = nl + 1;
+/* 用户文件中的配置项取值。 */
+struct CfgValue {
+    char name[64];
+    char value[320];
+};
+
+enum { CFG_VALUE_MAX = 64, CFG_TEXT_MAX = 16384 };
+
+static struct CfgValue sCfgValues[CFG_VALUE_MAX];
+static s32 sCfgValueCount = 0;
+
+/* 记录配置项取值；同名配置项以最后一次出现为准。 */
+static void cfg_value_set(const char* name, const char* value) {
+    for (s32 i = 0; i < sCfgValueCount; i++) {
+        if (!strcasecmp(sCfgValues[i].name, name)) {
+            snprintf(sCfgValues[i].value, sizeof(sCfgValues[i].value), "%s", value);
+            return;
+        }
     }
-    return false;
+    if (sCfgValueCount >= CFG_VALUE_MAX) { return; }
+    snprintf(sCfgValues[sCfgValueCount].name, sizeof(sCfgValues[0].name), "%s", name);
+    snprintf(sCfgValues[sCfgValueCount].value, sizeof(sCfgValues[0].value), "%s", value);
+    sCfgValueCount++;
 }
 
-/* 检查文件是否以换行结尾。 */
-static bool cfg_file_ends_with_newline(const char* path) {
-    FILE* f = fopen(path, "rb");
-    if (f == NULL) { return true; }
-    bool ok = true;
-    if (fseek(f, 0, SEEK_END) != 0) { ok = true; }
-    else {
-        const long sz = ftell(f);
-        if (sz <= 0) { ok = true; }
-        else if (fseek(f, sz - 1, SEEK_SET) != 0) { ok = true; }
-        else { ok = (fgetc(f) == '\n'); }
+static const char* cfg_value_get(const char* name, size_t nameLen) {
+    for (s32 i = 0; i < sCfgValueCount; i++) {
+        if (strlen(sCfgValues[i].name) == nameLen &&
+            !strncasecmp(sCfgValues[i].name, name, nameLen)) {
+            return sCfgValues[i].value;
+        }
     }
-    fclose(f);
-    return ok;
+    return NULL;
 }
 
-/* 将缺失键及其注释追加到配置文件。 */
-static s32 config_append_missing(const char* path, const char* seenKeys) {
-    if (path == NULL || seenKeys == NULL) { return 0; }
+/* 解析用户文件并应用到运行期配置；文本保持不变，供后续比较。 */
+static void cfg_parse_text(const char* text) {
+    sCfgValueCount = 0;
 
-    enum { kMaxLines = 512 };
-    static struct CfgLine lines[kMaxLines];
-    s32 lineCount = 0;
-    for (const char* p = kDefaultCfgText; *p != '\0' && lineCount < kMaxLines; ) {
-        const char* ls; const char* le;
+    const char* p = text;
+    char buf[512];
+    while (*p != '\0') {
+        const char* ls;
+        const char* le;
         if (!cfg_next_line(&p, &ls, &le)) { break; }
-        lines[lineCount].start = ls;
-        lines[lineCount].end   = le;
-        lineCount++;
+
+        const size_t n = (size_t)(le - ls);
+        if (n >= sizeof(buf)) { continue; }
+        memcpy(buf, ls, n);
+        buf[n] = '\0';
+
+        char* cut = buf;
+        while (*cut != '\0' && *cut != '#' && *cut != ';') { cut++; }
+        *cut = '\0';
+
+        char* eq = strchr(buf, '=');
+        if (eq == NULL) { continue; }
+        *eq = '\0';
+        char* name = trim(buf);
+        char* value = trim(eq + 1);
+        if (*name == '\0') { continue; }
+
+        cfg_value_set(name, value);
+        apply_kv(name, value);
     }
+}
 
-    s32 missingKeys = 0;
-    s32 i = 0;
-    while (i < lineCount) {
-        if (cfg_line_is_blank(lines[i].start, lines[i].end)) { i++; continue; }
+/*
+ * 用默认模板重建全文，把每个配置项的默认值换成用户取值。
+ * 模板之外的配置项不写入，缺失项保留模板默认值。
+ */
+static bool cfg_render(char* out, size_t cap) {
+    size_t len = 0;
+    const char* p = kDefaultCfgText;
+    while (*p != '\0') {
+        const char* ls;
+        const char* le;
+        if (!cfg_next_line(&p, &ls, &le)) { break; }
 
-        const s32 blkBegin = i;
-        s32 blkEnd = i;
-        i++;
-        while (i < lineCount && !cfg_line_is_blank(lines[i].start, lines[i].end)) {
-            blkEnd = i;
-            i++;
+        const char* name;
+        const size_t nameLen = cfg_line_key(ls, le, &name);
+        const char* value = (nameLen > 0) ? cfg_value_get(name, nameLen) : NULL;
+
+        if (value == NULL) {
+            if (len + (size_t)(le - ls) + 1 >= cap) { return false; }
+            memcpy(out + len, ls, (size_t)(le - ls));
+            len += (size_t)(le - ls);
+            out[len++] = '\n';
+            continue;
         }
 
-        for (s32 k = blkBegin; k <= blkEnd; k++) {
-            const char* key;
-            const size_t kl = cfg_line_key(lines[k].start, lines[k].end, &key);
-            if (kl == 0) { continue; }
-            if (!cfg_seen_has(seenKeys, key, kl)) { missingKeys++; }
-        }
-    }
-    if (missingKeys == 0) { return 0; }
+        const char* eq = ls;
+        while (eq < le && *eq != '=') { eq++; }
+        const char* vs = eq + 1;
+        while (vs < le && (*vs == ' ' || *vs == '\t')) { vs++; }
+        const char* ve = vs;
+        while (ve < le && *ve != '#' && *ve != ';') { ve++; }
+        const char* vt = ve;
+        while (vt > vs && (vt[-1] == ' ' || vt[-1] == '\t')) { vt--; }
 
-    FILE* f = fopen(path, "a");
+        const size_t vlen = strlen(value);
+        const bool pad = (vt == vs) && (vlen > 0);
+        const size_t need = (size_t)(vs - ls) + (pad ? 1u : 0u) + vlen
+                          + (size_t)(le - vt) + 1u;
+        if (len + need >= cap) { return false; }
+
+        memcpy(out + len, ls, (size_t)(vs - ls));
+        len += (size_t)(vs - ls);
+        if (pad) { out[len++] = ' '; }
+        memcpy(out + len, value, vlen);
+        len += vlen;
+        memcpy(out + len, vt, (size_t)(le - vt));
+        len += (size_t)(le - vt);
+        out[len++] = '\n';
+    }
+    out[len] = '\0';
+    return true;
+}
+
+static bool config_write_text(const char* path, const char* text) {
+    FILE* f = fopen(path, "w");
     if (f == NULL) {
-        LOG_ERROR("djui_modern: could not append missing options to %s", path);
-        return 0;
+        LOG_ERROR("djui_modern: could not write config to %s", path);
+        return false;
     }
-    if (!cfg_file_ends_with_newline(path)) { fputc('\n', f); }
-    fputs("\n"
-          "# ---------------- 自动补全的配置项 ----------------\n"
-          "# 以下是本文件里缺失、已由程序按当前版本补全的项（含说明注释）。\n"
-          "# 键的先后顺序不影响解析；想归类可以自行剪切到上面的对应小节。\n", f);
-
-    s32 addedKeys = 0;
-    i = 0;
-    while (i < lineCount) {
-        if (cfg_line_is_blank(lines[i].start, lines[i].end)) { i++; continue; }
-        const s32 blkBegin = i;
-        s32 blkEnd = i;
-        i++;
-        while (i < lineCount && !cfg_line_is_blank(lines[i].start, lines[i].end)) {
-            blkEnd = i;
-            i++;
-        }
-
-        s32 missingCount = 0;
-        for (s32 k = blkBegin; k <= blkEnd; k++) {
-            const char* key;
-            const size_t kl = cfg_line_key(lines[k].start, lines[k].end, &key);
-            if (kl > 0 && !cfg_seen_has(seenKeys, key, kl)) { missingCount++; }
-        }
-        if (missingCount == 0) { continue; }
-
-        for (s32 k = blkBegin; k <= blkEnd; k++) {
-            const char* key;
-            if (cfg_line_key(lines[k].start, lines[k].end, &key) != 0) { continue; }
-            fwrite(lines[k].start, 1, (size_t)(lines[k].end - lines[k].start), f);
-            fputc('\n', f);
-        }
-        for (s32 k = blkBegin; k <= blkEnd; k++) {
-            const char* key;
-            const size_t kl = cfg_line_key(lines[k].start, lines[k].end, &key);
-            if (kl == 0 || cfg_seen_has(seenKeys, key, kl)) { continue; }
-            fwrite(lines[k].start, 1, (size_t)(lines[k].end - lines[k].start), f);
-            fputc('\n', f);
-            addedKeys++;
-        }
-    }
-
+    fputs(text, f);
     fclose(f);
-    LOG_INFO("djui_modern: config auto-completed (%d new option(s)) -> %s", addedKeys, path);
-    return addedKeys;
+    return true;
 }
 
 void djui_modern_config_load(void) {
@@ -465,48 +448,44 @@ void djui_modern_config_load(void) {
     djui_modern_config_defaults();
 
     const char* path = config_path();
-    FILE* f = (path != NULL) ? fopen(path, "r") : NULL;
-
-    if (f == NULL) {
-        // 首次运行：生成默认配置。
-        config_write_default();
+    if (path == NULL) {
+        LOG_ERROR("djui_modern: cannot resolve game directory for djui_modern.cfg");
         return;
     }
 
-    // 已出现的键名，每行一个。
-    char seen[2048];
-    size_t seenLen = 0;
-    seen[0] = '\0';
-
-    char line[512];
-    while (fgets(line, sizeof(line), f) != NULL) {
-        // 去掉注释
-        char* hash = strchr(line, '#');
-        if (hash) { *hash = '\0'; }
-        char* semi = strchr(line, ';');
-        if (semi) { *semi = '\0'; }
-
-        char* eq = strchr(line, '=');
-        if (eq == NULL) { continue; }
-        *eq = '\0';
-
-        char* key = trim(line);
-        char* value = trim(eq + 1);
-        if (*key == '\0') { continue; }
-        apply_kv(key, value);
-
-        const size_t klen = strlen(key);
-        if (klen > 0 && klen < 64 && seenLen + klen + 1 < sizeof(seen)) {
-            memcpy(seen + seenLen, key, klen);
-            seenLen += klen;
-            seen[seenLen++] = '\n';
-            seen[seenLen] = '\0';
+    FILE* f = fopen(path, "r");
+    if (f == NULL) {
+        if (config_write_text(path, kDefaultCfgText)) {
+            LOG_INFO("djui_modern: wrote default config to %s", path);
         }
+        return;
     }
 
+    static char current[CFG_TEXT_MAX];
+    size_t currentLen = 0;
+    while (currentLen + 1 < sizeof(current)) {
+        if (fgets(current + currentLen, (int)(sizeof(current) - currentLen), f) == NULL) { break; }
+        currentLen += strlen(current + currentLen);
+    }
+    const bool truncated = !feof(f);
     fclose(f);
-    LOG_INFO("djui_modern: loaded config from %s", path);
 
-    // 将缺失项追加到配置末尾。
-    config_append_missing(path, seen);
+    cfg_parse_text(current);
+
+    static char merged[CFG_TEXT_MAX];
+    if (!cfg_render(merged, sizeof(merged))) {
+        LOG_ERROR("djui_modern: config template exceeds %u bytes, file left unchanged",
+                  (u32)sizeof(merged));
+        return;
+    }
+
+    if (truncated) {
+        LOG_ERROR("djui_modern: config exceeds %u bytes, file left unchanged",
+                  (u32)sizeof(current));
+    } else if (strcmp(merged, current) != 0) {
+        if (config_write_text(path, merged)) {
+            LOG_INFO("djui_modern: config rewritten from template -> %s", path);
+        }
+    }
+    LOG_INFO("djui_modern: loaded config from %s", path);
 }

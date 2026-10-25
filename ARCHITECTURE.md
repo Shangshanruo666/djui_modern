@@ -19,7 +19,7 @@ Lua 接口仍由原版代码负责。
 | `djui_modern_rrect.c` | 圆角轮廓、遮罩、顶点池和 display list |
 | `djui_modern_font.c` | `DjuiFont` 适配器和字体槽安装 |
 | `djui_modern_font_atlas.c` | TTF/OTF 光栅化、字形纹理、Emoji 和国旗 |
-| `djui_modern_config.c` | 配置读取、默认文件生成和缺失项补全 |
+| `djui_modern_config.c` | 配置读取、模板重建和取值覆盖 |
 | `djui_modern_gbi.h` | 模块私有的 display list 宏 |
 | `*_data.h` | 生成的字体、Emoji 和国旗数据 |
 | `font/` | 内嵌字体和授权信息 |
