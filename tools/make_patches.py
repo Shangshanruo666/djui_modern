@@ -21,6 +21,10 @@ Android 分支的 `djui.c` 与桌面版修订不同。高 fuzz 应用可能将
 `djui_modern_post_render();` 插入函数作用域之外，同时仍返回成功。
 因此两个分支分别生成补丁，不依赖高 fuzz。
 
+`Android.mk` 只存在于 Android 分支，其 `SRC_DIRS` 由 ndk-build 读取，
+必须与根目录 `Makefile` 同步加入 `src/pc/djui_modern`，否则模块源码
+不参与编译，`djui_modern_*` 符号在链接期未定义。
+
 注意：
   · 只处理 TARGET_FILES 中登记的文件。
   · 生成前将两边行尾统一为 LF，避免行尾差异干扰补丁内容。
@@ -42,6 +46,10 @@ TARGET_FILES = [
     "src/pc/djui/djui_text.c",
     "src/pc/djui/djui_panel_host_mods.c",
     "src/pc/gfx/gfx_dxgi.cpp",
+]
+
+ANDROID_ONLY_TARGET_FILES = [
+    "Android.mk",
 ]
 
 
@@ -302,6 +310,39 @@ def main():
             removed2 = sum(1 for l in p2.splitlines() if l.startswith("-") and not l.startswith("---"))
             print("  %-40s +%-4d -%-4d  -> %-34s [android]" % ("  -> Android variant", added2, removed2, name2))
             made += 1
+
+    for j, rel in enumerate(ANDROID_ONLY_TARGET_FILES, start=len(TARGET_FILES) + 1):
+        if android is None:
+            skipped.append(rel + "（未提供 Android 上游）")
+            continue
+
+        and_path = os.path.join(android, rel)
+        cur_path = os.path.join(current, rel)
+        if not os.path.isfile(and_path) or not os.path.isfile(cur_path):
+            skipped.append(rel + "（文件缺失）")
+            continue
+
+        up = read_lf(and_path)
+        cur = read_lf(cur_path)
+        if up == cur:
+            skipped.append(rel + "（无改动）")
+            continue
+
+        p = make_patch(rel, up, cur)
+        recheck, recheck_err = reapply_patch_to(up.decode("utf-8", "replace"), p)
+        if recheck_err is not None or recheck != cur.decode("utf-8", "replace"):
+            print("  !! %s 自检失败（%s），已中止" % (rel, recheck_err or "结果不一致"))
+            return 2
+
+        base = os.path.basename(rel)
+        name = "%02d-%s.android.patch" % (j, base)
+        with open(os.path.join(outdir, name), "w", encoding="utf-8", newline="\n") as f:
+            f.write(p)
+        entries.append((name, rel, "src/pc/djui_modern", "android"))
+        added = sum(1 for l in p.splitlines() if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in p.splitlines() if l.startswith("-") and not l.startswith("---"))
+        print("  %-40s +%-4d -%-4d  -> %-34s [android]" % (rel, added, removed, name))
+        made += 1
 
     with open(os.path.join(outdir, "markers.txt"), "w", encoding="utf-8", newline="\n") as f:
         f.write("# 自动生成，请勿手工编辑（由 src/pc/djui_modern/tools/make_patches.py 产出）。\n")

@@ -59,12 +59,14 @@ sh src/pc/djui_modern/install.sh --no-submodule
 
 ## 上游补丁边界
 
-当前修改 9 个原版文件。桌面和 Android 的 `Makefile`、`djui.c` 内容不同，
-因此各自生成一份变体补丁。
+当前修改 10 个原版文件。桌面和 Android 的 `Makefile`、`djui.c` 内容不同，
+因此各自生成一份变体补丁。`Android.mk` 只存在于 Android 分支，单独生成
+`.android.patch`。
 
 | 原版文件 | 修改 |
 | --- | --- |
 | `Makefile` | 将 `src/pc/djui_modern` 加入 `SRC_DIRS` |
+| `Android.mk` | 仅 Android：将 `src/pc/djui_modern` 加入 `SRC_DIRS` |
 | `src/pc/djui/djui.c` | 初始化和每帧生命周期调用 |
 | `src/pc/djui/djui_rect.c` | 在 `djui_rect_render()` 入口转发矩形绘制 |
 | `src/pc/djui/djui_gfx.c` | 上报文字字号和文字所属控件 |
@@ -76,6 +78,10 @@ sh src/pc/djui_modern/install.sh --no-submodule
 
 所有钩子声明都写在调用它的 `.c` 文件中，不修改上游头文件。这样可以避免
 `djui.h` 的依赖树在应用补丁后大范围重编。
+
+Android 侧由 ndk-build 读取 `Android.mk` 的 `SRC_DIRS`，与根目录 `Makefile`
+相互独立。两处必须同步加入 `src/pc/djui_modern`，否则模块源码不参与编译，
+链接期报 `djui_modern_*` 未定义。
 
 ### 弱符号
 

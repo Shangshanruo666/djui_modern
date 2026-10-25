@@ -99,6 +99,7 @@ djui_modern.cfg
 | 文件 | 用途 |
 | --- | --- |
 | `Makefile` | 将 `src/pc/djui_modern` 加入 `SRC_DIRS` |
+| `Android.mk` | 仅 Android：将 `src/pc/djui_modern` 加入 `SRC_DIRS` |
 | `src/pc/djui/djui.c` | 生命周期调用 |
 | `src/pc/djui/djui_rect.c` | 矩形接管钩子 |
 | `src/pc/djui/djui_gfx.c` | 字号和文字裁剪钩子 |
@@ -110,6 +111,9 @@ djui_modern.cfg
 
 桌面和 Android 只在原版文件内容不同时生成独立的 `.android.patch` 变体。
 补丁由 `tools/make_patches.py` 生成，不建议手工修改。
+
+Android 的 ndk-build 读取 `Android.mk` 的 `SRC_DIRS`，与根目录 `Makefile`
+相互独立，两处必须同步修改。
 
 ## 维护约束
 

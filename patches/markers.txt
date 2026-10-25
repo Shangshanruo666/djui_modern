@@ -12,3 +12,4 @@
 07-djui_text.c.patch|src/pc/djui/djui_text.c|// djui_modern 未参与编译时的空实现。|any
 08-djui_panel_host_mods.c.patch|src/pc/djui/djui_panel_host_mods.c|// djui_modern 通过该指针识别描述面板的文字节点。|any
 09-gfx_dxgi.cpp.patch|src/pc/gfx/gfx_dxgi.cpp|// 将 WM_CHAR 的 UTF-16 输入转换为 UTF-8，并合并代理对。|any
+10-Android.mk.android.patch|Android.mk|src/pc/djui_modern|android
