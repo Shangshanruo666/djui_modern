@@ -9,8 +9,8 @@
 
 | 用途 | 文件 | 内容 | 授权 |
 | --- | --- | --- | --- |
-| 西文与通用标点 | `RobotoCondensed-Subset.ttf` | 17 KB，138 个字形，129 个映射码点 | SIL OFL 1.1 |
-| 中文字形补充 | `SourceHanSansSC-Subset.otf` | 1.78 MB，6964 个字形，6930 个映射码点 | SIL OFL 1.1 |
+| 西文与通用标点 | `RobotoCondensed-Subset.ttf` | 55 KB，580 个字形，310 个映射码点 | SIL OFL 1.1 |
+| 中文字形补充 | `SourceHanSansSC-Subset.otf` | 3.2 MB，13198 个字形，6992 个映射码点 | SIL OFL 1.1 |
 | 星星 | `Power Star.otf` | 2 KB，2 个字形，1 个映射码位（U+007F） | SIL OFL 1.1 |
 | Emoji 源字体 | `Noto-3D-128-Subset.ttf` | 14 MB，461 个字形，位图数据 | SIL OFL 1.1 |
 | 国旗源字体 | `Noto-3D-128-flagsonly-Subset.ttf` | 6.9 MB，279 个字形，位图数据 | SIL OFL 1.1 |
@@ -37,16 +37,23 @@ U+007F，是该码位的唯一来源。
 外部字体位于字体链首位，内嵌字体继续提供缺字回退。包含完整汉字的外部字体
 会优先命中自身字形，不需要修改内嵌字体。
 
-## 中文字符范围
+## 字符范围
 
-Source Han Sans SC 子集从以下字符集合生成：
+子集范围以原版字表为基准，两个内嵌字体的并集覆盖字表全部字符：
 
-- `src/pc/djui/cn_glyphs.h` 中的全部游戏字符。
-- GB2312 编码区中的标点和符号。
-- GB2312 全部汉字，6763 个字符。
+- `src/pc/djui/djui_unicode.c` 的 `sSmCodeGlyphs` 主表，154 个西文字符，含
+  拉丁扩展、西里尔字母和组合符号。
+- `src/pc/djui/cn_glyphs.h` 的 6791 个汉字和中文标点。
+- `src/pc/djui/emoji_glyphs.h` 的 52 个 Emoji，由独立彩色图集渲染。
+- GB2312 编码区的标点和符号，以及 GB2312 全部 6763 个汉字。
+- 补充字符：GB2312 不收录的全角字母数字、表意空格、直角引号、中文排版
+  标点和常用货币与数学符号。中文排版、mod 文本和玩家命名会用到这些字符。
+- ASCII 可见区 0x20 至 0x7E。
 
-生成器直接解析该字表。生成时排除 Roboto Condensed 子集的全部 129 个映射码点，
-最终中文子集包含 6930 个映射码点和 6964 个字形。
+Roboto Condensed 子集收录西文、ASCII 和补充字符中的货币与数学符号，共 310 个
+映射码点。Source Han Sans SC 子集排除 Roboto 已提供的 310 个码点后收录其余
+字符，共 6992 个映射码点。
+两份内嵌字体的 cmap 没有交集。
 
 超出该范围的字符使用回退字形。需要生僻字时，可通过 `font_path` 指定完整字体，
 或将字体放入上述外部字体目录。
@@ -77,18 +84,21 @@ Vtx.tc 使用 S10.5 定点坐标，单张图集的边长上限为 512。Emoji �
 python src/pc/djui_modern/tools/make_subset_font.py \
   build/RobotoCondensed-Regular.ttf \
   src/pc/djui_modern/font/RobotoCondensed-Subset.ttf \
-  --han none
+  --han none \
+  --glyph-source src/pc/djui/djui_unicode.c
 ```
 
 ### Source Han Sans SC
 
-中文子集通过 `--exclude-font` 排除 Roboto 已提供的字符：
+中文子集通过 `--exclude-font` 排除 Roboto 已提供的字符。两个字表都传入，
+保证汉字、中文标点和西文重音字符都不遗漏：
 
 ```sh
 python src/pc/djui_modern/tools/make_subset_font.py \
   build/SourceHanSansSC-Regular.otf \
   src/pc/djui_modern/font/SourceHanSansSC-Subset.otf \
   --han gb2312 \
+  --glyph-source src/pc/djui/djui_unicode.c \
   --glyph-source src/pc/djui/cn_glyphs.h \
   --exclude-font src/pc/djui_modern/font/RobotoCondensed-Subset.ttf
 ```
