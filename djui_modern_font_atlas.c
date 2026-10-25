@@ -355,16 +355,13 @@ static u8 sCharsetSeen[0x110000 / 8];
 /* 与 sCharset 一一对应：每个码点由哪一份字体提供，决定度量与光栅使用哪份。 */
 static u8 sCharsetFace[CHARSET_MAX];
 
-/*
- * 收录一个码点。face < 0 时使用字体链中第一个包含该码点的字体。
- * 已收录或成功新增时返回 true；没有字体包含该码点时返回 false。
- */
-static bool charset_add_face(u32 cp, s32 face) {
+/* 收录一个码点，字体按字体链顺序选取；没有字体包含该码点时返回 false。 */
+static bool charset_add(u32 cp) {
     if (cp >= 0x110000u) { return false; }
     const u32 byte = cp >> 3;
     const u8  bit  = (u8)(1u << (cp & 7u));
     if (sCharsetSeen[byte] & bit) { return true; }   // 已收录（去重）
-    if (face < 0) { face = font_face_for(cp); }
+    const s32 face = font_face_for(cp);
     if (face < 0) { return false; }                  // 没有任何字体含这个字
     if (sCharsetCount >= CHARSET_MAX) { return false; }
     sCharsetSeen[byte] |= bit;
@@ -383,7 +380,7 @@ static int charset_cmp(const void* a, const void* b) {
 static void charset_scan_range(u32 lo, u32 hi) {
     for (u32 cp = lo; cp <= hi; cp++) {
         if (sCharsetCount >= CHARSET_MAX) { return; }
-        charset_add_face(cp, -1);   // 自动挑字体；没有字体含它就跳过
+        charset_add(cp);
     }
 }
 
@@ -411,7 +408,7 @@ static void charset_add_needed_cn(void) {
         s32 bytes = 1;
         const u32 cp = djui_modern_font_utf8_decode(u, &bytes);
         if (cp < 128) { continue; }        // ASCII 已单独收
-        charset_add_face(cp, -1);          // 自动挑字体；没有字体含它就跳过
+        charset_add(cp);
     }
 }
 
@@ -445,6 +442,11 @@ static void charset_build(void) {
     // charset_lookup 的二分查找依赖升序排列
     if (sCharsetCount > 2) {
         qsort(&sCharset[1], (size_t)(sCharsetCount - 1), sizeof(u32), charset_cmp);
+    }
+
+    /* sCharsetFace 与 sCharset 平行存放，排序后必须按新顺序重新绑定字体。 */
+    for (s32 i = 1; i < sCharsetCount; i++) {
+        sCharsetFace[i] = (u8)font_face_for(sCharset[i]);
     }
 
     // 重建 ASCII 快速索引（下标在排序后变了）
@@ -1174,12 +1176,8 @@ f32 djui_modern_font_atlas_char_width(const char* c, f32 fontScale) {
     const u32 cp = djui_modern_font_utf8_decode(c, &bytes);
 
     /*
-     * 空格：取**字体的真实 advance**。
-     *
-     * 这里以前写死 0.26em。Roboto Condensed 的 space 是 470/2048 = 0.2295em，
-     * 也就是说空格比字体设计宽了 13%。别的字符全都走字体原生度量，只有空格
-     * 偏宽，词间距与字母间距不成比例 —— 整行读起来就是"字距忽松忽紧"。
-     * 只有字体根本没有空格字形时，才退回 0.25em 的经验值。
+     * 空格使用字体的真实 advance，与其他字符保持同一套度量。
+     * 字体没有空格字形时才退回 0.25em 的经验值。
      */
     if (cp == ' ') {
         const s32 sci = charset_lookup(cp);
