@@ -55,13 +55,11 @@ typedef char djui_modern_emoji_atlas_dim_ok[
 static const s32 kRasterBuckets[] = { 12, 16, 20, 26, 32, 40, 52, 64, 88, 128, 192, 320, 512 };
 #define BUCKET_COUNT ((s32)(sizeof(kRasterBuckets) / sizeof(kRasterBuckets[0])))
 
-// 字符集只记录码点，位图按需生成。
-#define CHARSET_MAX 8192
-
-#define FALLBACK_INDEX 0
+// 码点哈希表的槽位数，同时是字形集数组的上限。
+// 覆盖中文、日文与韩文编码标准后约 28500 条，装载率低于 50%。
+#define CHARSET_MAX 65536
 
 #define GLYPH_TEX_MIN 4
-// 512 配合 S10.5 UV 编码仍留有一倍余量。
 #define GLYPH_TEX_MAX 512
 
 #define GLYPH_BYTES_LIMIT (128u * 1024u * 1024u)
@@ -78,7 +76,7 @@ typedef struct GlyphSlot {
     s32  xoff, yoff;
     f32  advanceEm;
     f32  rasterEm;
-    u8   state;       // 0 未生成，1 已生成，2 无法生成
+    u8   state;       // 0 未生成，1 已生成
 } GlyphSlot;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -99,6 +97,10 @@ typedef struct {
 
 static FontFace sFaces[FONT_MAX];
 static s32      sFaceCount = 0;
+
+/* 供 ImGui 构建字体图谱的中文字体数据；生命周期与字体链一致。 */
+static const u8* sCjkFontData = NULL;
+static u32 sCjkFontSize = 0;
 
 /*
  * 当前正在使用的字体。
@@ -127,29 +129,60 @@ static f32  sAscentEm   = 0.8f;
 static f32  sDescentEm  = -0.2f;
 static f32  sBaselineY  = -0.85f;
 
-// 字符集：下标 -> codepoint
-static u32   sCharset[CHARSET_MAX];
 static s32   sCharsetCount = 0;
-static s32   sAsciiIndex[128];      // ASCII 快速索引（-1 = 不在集合里）
 
-// 每个字符的档位行按首次使用分配。
-static GlyphSlot** sSlotGrid = NULL;   // [CHARSET_MAX]，行按需分配
-static s32   sSlotRows = 0;            // = sCharsetCount
-static s32   sSlotRowsUsed = 0;        // 实际分配过的行数（诊断用）
+typedef struct GlyphDense {
+    GlyphSlot slots[BUCKET_COUNT];
+} GlyphDense;
 
-/* 取槽位；该字符首次被用到时才为它分配一整行（分配失败返回 NULL）。 */
+typedef struct GlyphEntry {
+    u8 bi;
+    GlyphSlot slot;
+} GlyphEntry;
+
+typedef struct GlyphSet {
+    GlyphDense* dense;
+    GlyphEntry* sparse;
+    s32 count;
+    s32 cap;
+} GlyphSet;
+
+static GlyphSet* sGlyphSets = NULL;     // [CHARSET_MAX]，按字符分配
+static s32      sGlyphEntries = 0;
+static s32      sGlyphDenses = 0;
+
+
+/* 档位 0 是常用的正文尺寸；其余档位按需稀疏分配。 */
 static GlyphSlot* slot_at(s32 ci, s32 bi) {
-    if (sSlotGrid == NULL || ci < 0 || ci >= sSlotRows || bi < 0 || bi >= BUCKET_COUNT) {
+    if (sGlyphSets == NULL || ci < 0 || ci >= CHARSET_MAX || bi < 0 || bi >= BUCKET_COUNT) {
         return NULL;
     }
-    GlyphSlot* row = sSlotGrid[ci];
-    if (row == NULL) {
-        row = (GlyphSlot*)calloc(BUCKET_COUNT, sizeof(GlyphSlot));
-        if (row == NULL) { return NULL; }
-        sSlotGrid[ci] = row;
-        sSlotRowsUsed++;
+    GlyphSet* set = &sGlyphSets[ci];
+    if (set->dense == NULL) {
+        set->dense = (GlyphDense*)calloc(1, sizeof(GlyphDense));
+        if (set->dense == NULL) { return NULL; }
+        sGlyphDenses++;
     }
-    return &row[bi];
+    if (bi == 0) {
+        return &set->dense->slots[0];
+    }
+    for (s32 i = 0; i < set->count; i++) {
+        if (set->sparse[i].bi == bi) {
+            return &set->sparse[i].slot;
+        }
+    }
+    if (set->count >= set->cap) {
+        const s32 next = (set->cap == 0) ? 4 : set->cap * 2;
+        GlyphEntry* grown = (GlyphEntry*)realloc(set->sparse, (size_t)next * sizeof(GlyphEntry));
+        if (grown == NULL) { return NULL; }
+        set->sparse = grown;
+        set->cap = next;
+    }
+    GlyphEntry* entry = &set->sparse[set->count++];
+    entry->bi = (u8)bi;
+    memset(&entry->slot, 0, sizeof(entry->slot));
+    sGlyphEntries++;
+    return &entry->slot;
 }
 
 // 顶点池（每帧重置；djui_render 每帧两遍，见 frame_begin 说明）
@@ -158,7 +191,7 @@ static GlyphSlot* slot_at(s32 ci, s32 bi) {
 static Vtx*  sVtxPool = NULL;
 static u32   sVtxUsed = 0;
 
-// 当前已绑定的字形纹理（用于跳过重复绑定）
+// 当前已绑定的纹理（用于跳过重复绑定）
 static const u8* sBoundTex = NULL;
 
 // 上游按名义字格计算裁剪比例，绘制前需要换算到字形墨迹盒。
@@ -347,136 +380,54 @@ static s32 log2_of(s32 pot) {
 ///////////////////////////////////////////////////////////////////////////////
 
 /*
- * 已收录码点的去重位图（0x110000 位 = 136KB BSS）。
- * 重复码点会破坏 charset_lookup 的二分查找。
+ * 码点索引使用开放寻址哈希表。码点 0 作为空槽标记，
+ * U+0000 不参与字体渲染。
  */
-static u8 sCharsetSeen[0x110000 / 8];
+static u32 sCharHash[CHARSET_MAX];
+static u8  sCharsetFace[CHARSET_MAX];
 
-/* 与 sCharset 一一对应：每个码点由哪一份字体提供，决定度量与光栅使用哪份。 */
-static u8 sCharsetFace[CHARSET_MAX];
-
-/* 收录一个码点，字体按字体链顺序选取；没有字体包含该码点时返回 false。 */
-static bool charset_add(u32 cp) {
-    if (cp >= 0x110000u) { return false; }
-    const u32 byte = cp >> 3;
-    const u8  bit  = (u8)(1u << (cp & 7u));
-    if (sCharsetSeen[byte] & bit) { return true; }   // 已收录（去重）
-    const s32 face = font_face_for(cp);
-    if (face < 0) { return false; }                  // 没有任何字体含这个字
-    if (sCharsetCount >= CHARSET_MAX) { return false; }
-    sCharsetSeen[byte] |= bit;
-    sCharsetFace[sCharsetCount] = (u8)face;
-    sCharset[sCharsetCount++] = cp;
-    return true;
+static u32 charset_hash(u32 cp) {
+    u32 h = cp * 2654435761u;
+    return h ^ (h >> 16);
 }
 
-static int charset_cmp(const void* a, const void* b) {
-    const u32 x = *(const u32*)a;
-    const u32 y = *(const u32*)b;
-    return (x < y) ? -1 : ((x > y) ? 1 : 0);
-}
-
-/* 扫描 [lo, hi]，把字体里实际存在的码点收进字符集。 */
-static void charset_scan_range(u32 lo, u32 hi) {
-    for (u32 cp = lo; cp <= hi; cp++) {
-        if (sCharsetCount >= CHARSET_MAX) { return; }
-        charset_add(cp);
+/* 返回码点的槽位；未收录时按字体链选取字体并插入。 */
+static s32 charset_add(u32 cp) {
+    if (cp == 0 || cp >= 0x110000u) { return -1; }
+    u32 i = charset_hash(cp) & (CHARSET_MAX - 1);
+    for (s32 n = 0; n < CHARSET_MAX; n++) {
+        if (sCharHash[i] == cp) { return (s32)i; }
+        if (sCharHash[i] == 0) {
+            const s32 face = font_face_for(cp);
+            if (face < 0) { return -1; }
+            sCharHash[i] = cp;
+            sCharsetFace[i] = (u8)face;
+            sCharsetCount++;
+            return (s32)i;
+        }
+        i = (i + 1) & (CHARSET_MAX - 1);
     }
+    return -1;
 }
 
 /*
- * 以只读方式引用上游 GB2312 字表，并放入布局兼容的本地数组。
- * 不直接引用 sSmCodeGlyphs_CN[]，因为其完整类型仅在上游 .c 文件中可见。
- */
-typedef struct {
-    char unicode[4];
-    char base;
-    f32  width;
-    u32  spriteIndex;
-} DjuiModernCnGlyph;
-
-static const DjuiModernCnGlyph kCnGlyphs[] = {
-#include "pc/djui/cn_glyphs.h"
-};
-
-/* 把"游戏真正会用到的汉字"收进字符集（字体没有的跳过）。 */
-static void charset_add_needed_cn(void) {
-    const s32 n = (s32)(sizeof(kCnGlyphs) / sizeof(kCnGlyphs[0]));
-    for (s32 i = 0; i < n; i++) {
-        const char* u = kCnGlyphs[i].unicode;
-        if (u[0] == '\0') { continue; }
-        s32 bytes = 1;
-        const u32 cp = djui_modern_font_utf8_decode(u, &bytes);
-        if (cp < 128) { continue; }        // ASCII 已单独收
-        charset_add(cp);
-    }
-}
-
-/*
- * 字符集按下述顺序构建：
- *   1) ASCII；
- *   2) cn_glyphs.h 中的 GB2312 字符；
- *   3) 字体 cmap 中的其他字符。
- * 游戏字符优先占位，可避免完整 CJK 字体在 CHARSET_MAX 处截断常用文本。
+ * 启动时只收录 ASCII，其余码点在首次渲染时由 charset_lookup 插入。
+ * 收录范围由子集化脚本的区段表决定。
  */
 static void charset_build(void) {
-    memset(sCharsetSeen, 0, sizeof(sCharsetSeen));
-    for (s32 i = 0; i < 128; i++) { sAsciiIndex[i] = -1; }
+    memset(sCharHash, 0, sizeof(sCharHash));
+    sCharsetCount = 0;
 
-    // 下标 0 留给回退字形；实际码点从 1 开始放。
-    sCharsetCount = 1;
-    sCharset[0] = '?';
-    sCharsetFace[0] = (u8)((font_face_for('?') >= 0) ? font_face_for('?') : 0);
+    // ASCII 可见区最高频，先收
+    for (u32 cp = 0x20; cp <= 0x7F; cp++) { charset_add(cp); }
 
-    // 1) ASCII 可见区（最高频，先收）
-    charset_scan_range(0x20, 0x7F);
-
-    // 2) 游戏字符必须在扫描字体 cmap 之前加入
-    charset_add_needed_cn();
-
-    // 3) 其余区段：尽量补齐字体包含的字符
-    charset_scan_range(0x4E00, 0x9FFF);
-    charset_scan_range(0xA0, 0x4DFF);
-    charset_scan_range(0xA000, 0xFFFD);
-
-    // charset_lookup 的二分查找依赖升序排列
-    if (sCharsetCount > 2) {
-        qsort(&sCharset[1], (size_t)(sCharsetCount - 1), sizeof(u32), charset_cmp);
-    }
-
-    /* sCharsetFace 与 sCharset 平行存放，排序后必须按新顺序重新绑定字体。 */
-    for (s32 i = 1; i < sCharsetCount; i++) {
-        sCharsetFace[i] = (u8)font_face_for(sCharset[i]);
-    }
-
-    // 重建 ASCII 快速索引（下标在排序后变了）
-    for (s32 i = 1; i < sCharsetCount; i++) {
-        if (sCharset[i] < 128) { sAsciiIndex[sCharset[i]] = i; }
-    }
-
-    s32 cjk = 0;
-    for (s32 i = 1; i < sCharsetCount; i++) {
-        if (codepoint_is_cjk(sCharset[i])) { cjk++; }
-    }
-    LOG_INFO("djui_modern: charset built (%d rows, %d cjk, capped at %d)",
-             sCharsetCount, cjk, CHARSET_MAX);
+    LOG_INFO("djui_modern: charset built (%d entries, capped at %d)",
+             sCharsetCount, CHARSET_MAX);
 }
 
-/* 返回 codepoint 在字符集里的下标。ASCII 走 O(1) 快速表；其余走二分查找。
- * 找不到返回 FALLBACK_INDEX（0，画 '?'）。 */
+/* 返回码点在哈希表中的槽位下标；未收录码点先尝试插入。 */
 static s32 charset_lookup(u32 cp) {
-    if (cp < 128) {
-        const s32 idx = sAsciiIndex[cp];
-        return (idx >= 0) ? idx : FALLBACK_INDEX;
-    }
-    s32 lo = 1, hi = sCharsetCount - 1;
-    while (lo <= hi) {
-        const s32 mid = (lo + hi) >> 1;
-        const u32 v = sCharset[mid];
-        if (v == cp) { return mid; }
-        if (v < cp) { lo = mid + 1; } else { hi = mid - 1; }
-    }
-    return FALLBACK_INDEX;
+    return charset_add(cp);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -484,23 +435,17 @@ static s32 charset_lookup(u32 cp) {
 ///////////////////////////////////////////////////////////////////////////////
 
 /*
- * 把 stb 输出的 8 位覆盖度位图落成一张独立的 POT RGBA32 纹理。
- *
- * RGB 恒为 255（白），颜色完全由 RDP 的 ENV 决定（G_CC_FADEA 的 TEXEL0×ENV）。
- * 位图左上角对齐在纹理 (0,0)，因此 UV 直接就是 (0,0)-(bw,bh) 纹素。
+ * 把 stb 输出的 8 位覆盖度位图落成一张独立的 POT IA8 纹理。
+ * 高 4 位强度恒为满值，低 4 位保存覆盖度，字形颜色由 G_CC_FADEA 的 ENV 决定。
  */
 static bool glyph_make_texture(GlyphSlot* g, const u8* bmp, s32 bw, s32 bh) {
     const s32 tw = pot_ceil(bw);
     const s32 th = pot_ceil(bh);
-    /*
-     * pot_ceil 的上界被钳在 GLYPH_TEX_MAX，字形位图超出该上限时
-     * 返回值会小于位图尺寸，因此按位图尺寸逐行拷贝前必须确认纹理能够容纳。
-     */
     if (tw < bw || th < bh || tw > GLYPH_TEX_MAX || th > GLYPH_TEX_MAX) {
         return false;
     }
 
-    const u32 bytes = (u32)tw * (u32)th * 4u;
+    const u32 bytes = (u32)tw * (u32)th;
     if (sGlyphBytes + bytes > GLYPH_BYTES_LIMIT) {
         if (!sBudgetWarned) {
             sBudgetWarned = true;
@@ -510,28 +455,23 @@ static bool glyph_make_texture(GlyphSlot* g, const u8* bmp, s32 bw, s32 bh) {
         return false;
     }
 
-    u8* tex = (u8*)malloc(bytes);
+    u8* tex = (u8*)calloc(bytes, 1);
     if (tex == NULL) { return false; }
-
-    // 纹理其余部分必须是透明（alpha=0），否则双线性会采到未初始化字节
-    memset(tex, 0, bytes);
-
     for (s32 y = 0; y < bh; y++) {
         const u8* src = bmp + (size_t)y * bw;
-        u8* dst = tex + ((size_t)y * tw) * 4;
+        u8* dst = tex + (size_t)y * tw;
         for (s32 x = 0; x < bw; x++) {
-            dst[0] = 255; dst[1] = 255; dst[2] = 255; dst[3] = src[x];
-            dst += 4;
+            dst[x] = (u8)(0xF0u | (src[x] >> 4));
         }
     }
 
-    g->tex     = tex;
-    g->tw      = tw;
-    g->th      = th;
-    g->twLog2  = log2_of(tw);
-    g->thLog2  = log2_of(th);
-    g->bw      = bw;
-    g->bh      = bh;
+    g->tex = tex;
+    g->tw = tw;
+    g->th = th;
+    g->twLog2 = log2_of(tw);
+    g->thLog2 = log2_of(th);
+    g->bw = bw;
+    g->bh = bh;
     sGlyphBytes += bytes;
     return true;
 }
@@ -607,6 +547,20 @@ static bool font_face_setup(FontFace* face, u8* data, u32 size, bool own, const 
     return true;
 }
 
+static u8* font_parts_join(const struct DjuiModernFontPart* parts, s32 count, u32* sizeOut) {
+    u32 total = 0;
+    for (s32 i = 0; i < count; i++) { total += parts[i].size; }
+    u8* data = (u8*)malloc(total);
+    if (data == NULL) { return NULL; }
+    u32 offset = 0;
+    for (s32 i = 0; i < count; i++) {
+        memcpy(data + offset, parts[i].data, parts[i].size);
+        offset += parts[i].size;
+    }
+    *sizeOut = total;
+    return data;
+}
+
 /* 从磁盘读一个字体文件并加入字体链。 */
 static bool font_add_path(const char* path) {
     if (path == NULL || path[0] == '\0') { return false; }
@@ -655,18 +609,11 @@ static bool font_scan_cb(void* user, const char* path) {
 }
 
 /*
- * 字体查找：**游戏根目录**（可执行文件所在目录）。
+ * 字体查找使用真实文件系统接口。fs_init 只把 AppData 用户目录挂入
+ * fs_enumerate 的搜索路径，游戏目录不在其中。
  *
- * ⚠⚠ 必须走**真实文件系统**（`fs_sys_walk`），不能用 `fs_enumerate`：
- *   `fs_init()` 只把**用户目录**（`sys_user_path()` =
- *   `%APPDATA%\sm64coopdx\`）挂进了搜索路径，**游戏目录不在其中** ——
- *   `fs_enumerate("")` 列出来的是 AppData 里的文件，永远看不到游戏目录。
- *
- * 顺序（先找到先用）：
- *   <游戏根目录>/djui_modern/   ← 推荐目录，文件名可为任意有效 .ttf/.otf
- *   <游戏根目录>/               ← 根目录下任意 .ttf / .otf
- * 同一目录里若有多个字体，按**文件名升序**取第一个 —— 结果确定，
- * 不会因为文件系统的枚举顺序不同而每次换字体。
+ * 依次查找游戏根目录下的 djui_modern/ 与根目录本身，取文件名字典序
+ * 最小的 .ttf/.otf，使结果不依赖目录枚举顺序。
  */
 static bool font_try_dir(const char* dir) {
     if (dir == NULL || dir[0] == '\0') { return false; }
@@ -680,14 +627,10 @@ static bool font_try_dir(const char* dir) {
 }
 
 /*
- * 装配字体链。
- *
- * 优先级（**注册顺序即优先级**：`font_face_for()` 取第一个含该码点的字体）：
- *   1) cfg 的 font_path
- *   2) 游戏根目录里的外部字体
- *        <游戏根目录>/djui_modern/  →  <游戏根目录>/
- *   3) 内嵌字体链 —— 西文(Roboto Condensed) → 中文(Source Han Sans SC)
- *                → 星星(Power Star，仅提供 U+007F)
+ * 字体链按注册顺序确定优先级，font_face_for 返回第一个包含码点的字体：
+ *   1) 配置项 font_path
+ *   2) 游戏根目录中的外部字体
+ *   3) 内嵌西文、中日韩与星星字体
  *
  * 外部字体位于链首，内嵌字体追加在后作为缺字回退。
  * 仅包含西文的外部字体由内嵌中文字体补充汉字；包含汉字的字体会优先命中自身字形。
@@ -706,10 +649,9 @@ static void font_load_chain(void) {
         const char* exeDir = sys_exe_path_dir();
         if (exeDir != NULL && exeDir[0] != '\0') {
             char dir[SYS_MAX_PATH];
-            // 1) 游戏根目录下的 djui_modern 文件夹（推荐）
+            // 游戏根目录下的 djui_modern 目录优先
             if (snprintf(dir, sizeof(dir), "%s/djui_modern", exeDir) > 0 && font_try_dir(dir)) {
                 haveExternal = true;
-            // 2) 游戏根目录本身
             } else if (font_try_dir(exeDir)) {
                 haveExternal = true;
             }
@@ -719,27 +661,40 @@ static void font_load_chain(void) {
         LOG_INFO("djui_modern: external font registered first; embedded chain appended as fallback");
     }
 
-    // 3) 内嵌字体链：顺序即优先级（西文、中文、星星）。
-    //    外部字体存在时也照常追加 —— 它只负责"外部字体没覆盖到的码点"。
+    // 内嵌字体追加在外部字体之后，用于补充外部字体缺少的码点。
 #if defined(DJUI_MODERN_LATIN_FONT_PRESENT)
-    if (sFaceCount < FONT_MAX &&
-        font_face_setup(&sFaces[sFaceCount], (u8*)sDjuiModernLatinFont,
-                        sDjuiModernLatinFontSize, false, DJUI_MODERN_LATIN_FONT_NAME)) {
-        sFaceCount++;
+    if (sFaceCount < FONT_MAX) {
+        u32 size = 0;
+        u8* data = font_parts_join(sDjuiModernLatinFont,
+            (s32)(sizeof(sDjuiModernLatinFont) / sizeof(sDjuiModernLatinFont[0])), &size);
+        if (data != NULL && font_face_setup(&sFaces[sFaceCount], data, size,
+                                            true, DJUI_MODERN_LATIN_FONT_NAME)) {
+            sFaceCount++;
+        }
     }
 #endif
 #if defined(DJUI_MODERN_CJK_FONT_PRESENT)
-    if (sFaceCount < FONT_MAX &&
-        font_face_setup(&sFaces[sFaceCount], (u8*)sDjuiModernCjkFont,
-                        sDjuiModernCjkFontSize, false, DJUI_MODERN_CJK_FONT_NAME)) {
-        sFaceCount++;
+    if (sFaceCount < FONT_MAX) {
+        u32 size = 0;
+        u8* data = font_parts_join(sDjuiModernCjkFont,
+            (s32)(sizeof(sDjuiModernCjkFont) / sizeof(sDjuiModernCjkFont[0])), &size);
+        if (data != NULL && font_face_setup(&sFaces[sFaceCount], data, size,
+                                            true, DJUI_MODERN_CJK_FONT_NAME)) {
+            sFaceCount++;
+            sCjkFontData = data;
+            sCjkFontSize = size;
+        }
     }
 #endif
 #if defined(DJUI_MODERN_STAR_FONT_PRESENT)
-    if (sFaceCount < FONT_MAX &&
-        font_face_setup(&sFaces[sFaceCount], (u8*)sDjuiModernStarFont,
-                        sDjuiModernStarFontSize, false, DJUI_MODERN_STAR_FONT_NAME)) {
-        sFaceCount++;
+    if (sFaceCount < FONT_MAX) {
+        u32 size = 0;
+        u8* data = font_parts_join(sDjuiModernStarFont,
+            (s32)(sizeof(sDjuiModernStarFont) / sizeof(sDjuiModernStarFont[0])), &size);
+        if (data != NULL && font_face_setup(&sFaces[sFaceCount], data, size,
+                                            true, DJUI_MODERN_STAR_FONT_NAME)) {
+            sFaceCount++;
+        }
     }
 #endif
 }
@@ -770,9 +725,8 @@ bool djui_modern_font_atlas_init(void) {
     }
 
     /*
-     * 基线与行高以**链首**（西文）为准；每个字形各自按**自己那份字体**的
-     * upem 换算（见 slot_rasterize / char_width 里的 sCur），基线共享 ——
-     * 这正是"多字体混排"该有的行为：不同字体坐在同一条基线上。
+     * 基线与行高取字体链首的字体系数，每个字形按自身字体的 upem
+     * 换算尺寸，混排时共享同一条基线。
      */
     sCur = &sFaces[0];
     detect_latin_monospace();
@@ -788,9 +742,8 @@ bool djui_modern_font_atlas_init(void) {
     sBaselineY = -(1.0f - desc);
 
     /*
-     * 下伸部**超出字格**的部分 = 字体真实下伸 - 基线下方的可用空间。
-     * 聊天框的硬裁剪要把下边界放宽这么多，否则 g / y / p / q / j 的尾巴会被切掉
-     * （聊天消息的文字节点高度恰好 = 1em）。详见 sClipPadBottomEm 的说明。
+     * 下伸部超出一行高度的部分需要计入聊天框硬裁剪，否则 g、y、p、q、j
+     * 的下伸笔画会被截断。
      */
     {
         const f32 descUsed = 1.0f + sBaselineY;   // 基线下方的可用空间（= 钳位后的 desc）
@@ -800,20 +753,11 @@ bool djui_modern_font_atlas_init(void) {
 
     charset_build();
 
-    sSlotRows = sCharsetCount;
-    sSlotGrid = (GlyphSlot**)calloc((size_t)CHARSET_MAX, sizeof(GlyphSlot*));
-    if (sSlotGrid == NULL) {
-        LOG_ERROR("djui_modern: slot grid alloc failed (%d rows)", sSlotRows);
+    sGlyphSets = (GlyphSet*)calloc((size_t)CHARSET_MAX, sizeof(GlyphSet));
+    if (sGlyphSets == NULL) {
+        LOG_ERROR("djui_modern: glyph set alloc failed (%d slots)", CHARSET_MAX);
         font_free_all();
         return false;
-    }
-
-    // 把回退槽（下标 0）指向 '?' 的位图：改 sCharset[0] 为 '?' 的 codepoint，
-    // 这样 slot_rasterize 会光栅化 '?'，之后所有"查不到的字"都画成 '?'。
-    {
-        const s32 qIdx = charset_lookup('?');
-        if (qIdx > 0) { sCharset[FALLBACK_INDEX] = sCharset[qIdx]; }
-        else          { sCharset[FALLBACK_INDEX] = '?'; }
     }
 
     sGlyphRasterized = 0;
@@ -849,19 +793,10 @@ bool djui_modern_font_atlas_init(void) {
              sFaceCount, sFontName);
     LOG_INFO("djui_modern: metrics from face0 (unitsPerEm=%.0f, ascent=%.3fem, descent=%.3fem, baseline=%.2f, clipPad=%.3fem)",
              sUnitsPerEm, sAscentEm, sDescentEm, sBaselineY, sClipPadBottomEm);
-    LOG_INFO("djui_modern: font slots = %d chars x %d buckets, one immutable texture per glyph",
-             sSlotRows, BUCKET_COUNT);
-    /*
-     * 内存预算（便于诊断"堆不够用"这类问题）：
-     *   · 槽位表是**按行惰性分配**的 —— 只有真正显示过的字符才占内存，
-     *     未用到的行只占一个指针。这里报的是"全部用满时的上限"，不是实占。
-     *   · 顶点池是固定分配，每帧重置。
-     * 实际用掉的行数在 shutdown 时打印。
-     */
-    LOG_INFO("djui_modern: heap budget: slot grid lazy %d x %d x %u B (<= %.1f MB if all used), "
-             "vtx pool %.0f KB",
-             sSlotRows, BUCKET_COUNT, (unsigned)sizeof(GlyphSlot),
-             (double)sSlotRows * BUCKET_COUNT * sizeof(GlyphSlot) / (1024.0 * 1024.0),
+    LOG_INFO("djui_modern: font slots = %d chars, bucket 0 dense + other buckets sparse",
+             sCharsetCount);
+    LOG_INFO("djui_modern: heap budget: glyph set table %.1f MB, vtx pool %.0f KB",
+             (double)CHARSET_MAX * sizeof(GlyphSet) / (1024.0 * 1024.0),
              (double)(sizeof(Vtx) * GLYPH_VERTS * GLYPH_POOL_BLOCKS) / 1024.0);
 
     /*
@@ -871,7 +806,7 @@ bool djui_modern_font_atlas_init(void) {
      *   (a) 字符集没收录（i=-1）  → 字符集构建的问题
      *   (b) 收录了但渲染链路没画出来 → 纹理上传/绑定的问题
      * 抽检包含 U+963F「阿」，用于确认字符集不是只收录某个区间的前 N 个码点；
-     * 和 U+300C「」（cn_glyphs.h 没有、本模块额外补的直角引号）。
+     * 和 U+300C「」，CJK 标点区段的首字符附近。
      */
     {
         static const u32 kProbe[] = {
@@ -894,24 +829,26 @@ bool djui_modern_font_atlas_init(void) {
 }
 
 void djui_modern_font_atlas_shutdown(void) {
-    // 释放全部字形纹理（每个字形独立 malloc，必须逐个释放；行本身也按需分配）
-    if (sSlotGrid != NULL) {
-        LOG_INFO("djui_modern: slot grid actually used %d / %d rows (%.0f KB)",
-                 sSlotRowsUsed, sSlotRows,
-                 (double)sSlotRowsUsed * BUCKET_COUNT * sizeof(GlyphSlot) / 1024.0);
-        for (s32 ci = 0; ci < sSlotRows; ci++) {
-            GlyphSlot* row = sSlotGrid[ci];
-            if (row == NULL) { continue; }
-            for (s32 bi = 0; bi < BUCKET_COUNT; bi++) {
-                if (row[bi].tex != NULL) { free(row[bi].tex); row[bi].tex = NULL; }
+    if (sGlyphSets != NULL) {
+        LOG_INFO("djui_modern: glyph storage %d dense chars, %d sparse buckets",
+                 sGlyphDenses, sGlyphEntries);
+        for (s32 ci = 0; ci < CHARSET_MAX; ci++) {
+            GlyphSet* set = &sGlyphSets[ci];
+            if (set->dense != NULL) {
+                free(set->dense->slots[0].tex);
             }
-            free(row);
+            for (s32 bi = 0; bi < set->count; bi++) {
+                free(set->sparse[bi].slot.tex);
+            }
+            free(set->dense);
+            free(set->sparse);
         }
-        free(sSlotGrid);
+        free(sGlyphSets);
     }
-    sSlotGrid = NULL;
-    sSlotRows = 0;
-    sSlotRowsUsed = 0;
+    sGlyphBytes = 0;
+    sGlyphSets = NULL;
+    sGlyphEntries = 0;
+    sGlyphDenses = 0;
     sCharsetCount = 0;
 
     font_free_all();
@@ -959,7 +896,7 @@ void djui_modern_font_atlas_frame_begin(void) {
 }
 
 /*
- * 半帧重渲的第二遍：**不清零**顶点池。
+ * 半帧重渲的第二遍不清零顶点池。
  *
  * djui_render() 在插值重渲时会执行两遍。Lua HUD 文字的指令块由 memcpy
  * 恢复，第二遍不会重新执行字体钩子；此时清零顶点池会覆写其几何数据。
@@ -971,6 +908,11 @@ void djui_modern_font_atlas_pass_begin(void) {
 
 bool djui_modern_font_atlas_ready(void) { return sReady; }
 const char* djui_modern_font_atlas_name(void) { return sFontName; }
+
+const unsigned char* djui_modern_font_atlas_cjk_data(unsigned int* size) {
+    if (size != NULL) { *size = sCjkFontSize; }
+    return sCjkFontData;
+}
 
 void djui_modern_font_atlas_stats(u32* atlasPixels, u32* glyphCount, u32* uploads) {
     if (atlasPixels) { *atlasPixels = sGlyphBytes; }
@@ -1026,26 +968,26 @@ f32 djui_modern_font_atlas_get_scale_hint(void) {
  *
  *   Hide and Seek 顶部文字使用 scale=0.5，
  *   屏幕 em = defaultFontScale(32) × 0.5 × djuiScale = 16px，
- *   而档位表里**正好有一档 16** -> ratio 恒为 1.00 -> 最坏情形。
+ *   而档位表包含 16，此时比值为 1.00，无法降采样。
  *
  * 位图严格大于屏幕 em 时，双线性缩小采样可提供盒式滤波效果，
  * 使笔画边缘获得平滑的灰度过渡。
  *
  * 取值：1.25 即可让每个屏幕像素至少覆盖一个完整纹素周期；
  *   再往上画质收益迅速衰减（人眼几乎看不出 1.25 与 1.6 的差别），
- *   而纹理面积按**平方**增长（1.25² ≈ +56%，1.6² = +156%）。
+ *   而纹理面积按平方增长（1.25² 约增加 56%，1.6² 增加 156%）。
  *   1.25 与档位表本身较密的间距（12→16→20→26）配合，绝大多数 em
  *   会落到"下一个档"，ratio 落在 [1.0, 1.7] 区间，兼顾清晰与内存。
  */
 #define kGlyphSupersample 1.25f
 
 /* 小字号汉字需要更多纹理像素，避免密集笔画在降采样后粘连。 */
-#define kSmallCjkMinRasterEm 48.0f
+#define kSmallCjkMinRasterEm 40.0f
 
 /*
  * 屏幕 em 像素 -> 档位下标。
  *
- * 取**第一个 >= em × kGlyphSupersample 的档**。因为 kGlyphSupersample > 1，
+ * 取第一个不小于 em × kGlyphSupersample 的档位。因为 kGlyphSupersample > 1，
  * 结果必然严格大于 em（除非 em 已超过最高档 512，此时钳到最高档），
  * 从而保证"位图分辨率 > 屏幕分辨率"，恒有超采样可供降采样。
  *
@@ -1106,7 +1048,7 @@ static void detect_latin_monospace(void) {
     f32 mn = 1e9f, mx = -1e9f;
     s32 n = 0;
     if (sFaceCount == 0) { sLatinMonospace = false; return; }
-    sCur = &sFaces[0];   // 只看**西文那份**（链首）
+    sCur = &sFaces[0];   // 等宽检测只使用字体链首
     for (const char* p = kProbe; *p != '\0'; p++) {
         const s32 gi = stbtt_FindGlyphIndex(&sFont, (s32)*p);
         if (gi == 0) { continue; }
@@ -1136,15 +1078,8 @@ static s16 fallback_kern_units(u32 cp1, u32 cp2) {
 // 成对字偶间距（em 相对量，通常为负）。字体无 kern/GPOS 数据时走兜底表。
 static f32 glyph_kern_em(u32 prev, u32 cur) {
     if (prev == 0 || cur == 0) { return 0.0f; }
-    /*
-     * 同字重复**不再直接跳过**：字体给 ll / oo 这类对配字偶的情况是存在的，
-     * 交给字体自己回答更可靠（CJK 字体没有字偶数据，查出来自然是 0）。
-     */
-
-    /*
-     * 字偶间距只在**同一份字体内部**才有意义：跨字体（例如西文 T 紧接中文"中"）
-     * 没有共同的度量体系，硬套只会出错。
-     */
+    // 同一字符重复时仍查询字偶间距，字体可能为这类字符对提供数据。
+    // 跨字体的字偶间距没有共同度量体系，直接返回零。
     const s32 fi = font_face_for(prev);
     if (fi < 0 || font_face_for(cur) != fi) { return 0.0f; }
     sCur = &sFaces[fi];
@@ -1181,7 +1116,8 @@ f32 djui_modern_font_atlas_char_width(const char* c, f32 fontScale) {
      */
     if (cp == ' ') {
         const s32 sci = charset_lookup(cp);
-        sCur = &sFaces[(sCharsetFace[sci] < sFaceCount) ? sCharsetFace[sci] : 0];
+        const s32 face = (sci >= 0) ? sCharsetFace[sci] : 0;
+        sCur = &sFaces[(face < sFaceCount) ? face : 0];
         const s32 gs = stbtt_FindGlyphIndex(&sFont, ' ');
         s32 sAdv = 0, sLsb = 0;
         if (gs != 0) { stbtt_GetGlyphHMetrics(&sFont, gs, &sAdv, &sLsb); }
@@ -1194,8 +1130,10 @@ f32 djui_modern_font_atlas_char_width(const char* c, f32 fontScale) {
     // 国旗：头 1em、尾 0（见 flag_tile_at 的说明）
     if (flag_consumes(c)) { return (flag_tile_at(c) >= 0) ? 1.0f : 0.0f; }
 
-    // 度量必须来自"这个字所属的那份字体"
-    const s32 ci = charset_lookup(cp);
+    // 度量必须来自"这个字所属的那份字体"；未收录时使用回退字符
+    s32 ci = charset_lookup(cp);
+    if (ci < 0) { ci = charset_lookup('?'); }
+    if (ci < 0) { return 0.5f; }
     sCur = &sFaces[(sCharsetFace[ci] < sFaceCount) ? sCharsetFace[ci] : 0];
 
     const s32 gi = stbtt_FindGlyphIndex(&sFont, (s32)cp);
@@ -1215,10 +1153,8 @@ f32 djui_modern_font_atlas_char_width(const char* c, f32 fontScale) {
     }
 
     /*
-     * 字偶间距：加在**当前字符**的推进量上（= 与"下一个字符"之间的收紧量）。
-     * char_width(c) 的返回值决定"下一个字符画在哪"，所以 kern(cur, next)
-     * 必须算在 cur 上 —— 见上方"字偶间距"一节的说明。
-     * 前瞻是纯函数（只看 c 与 c+bytes），测量与渲染结果必然一致。
+     * 字偶间距计入当前字符的推进量，决定下一个字符的位置。
+     * 前瞻只读取 c 与 c+bytes，测量与渲染使用同一结果。
      */
     u32 nextCp = 0;
     const char* nc = c + bytes;
@@ -1279,24 +1215,15 @@ static const Gfx sGlyphTemplate[] = {
 };
 
 /*
- * 绑定一张字形纹理。
- *
- * ⚠ gDPSetTextureOverrideDjui 的 (w,h) 参数是**边长的 log2**，不是纹素数！
- *   证据：gfx_pc.c:2465 的处理是
- *       djui_gfx_dp_set_override(..., 1 << C0(16, 8), 1 << C0(8, 8), ...)
- *   而且 gSetOverrideDjui 里 w/h 各只占 8 位字段（_SHIFTL(w,16,8)）。
- *   所以纹理边长必须是 2 的幂 —— 这正是 pot_ceil() 的用途。
- *
- *   注意 gDPLoadTextureBlockWithoutTexture 里的 (tw, th) 是**纹素数**，
- *   只用来算 tile 的 lrs/lrt（决定 UV 归一化基准 tex_width/tex_height
- *   = (lrs-uls+4)/4），与上面的 log2 是两套参数。二者必须一致，否则 UV 会
- *   整体缩放错位。（对照 djui_gfx.c:118 的 djui_gfx_power_of_two(w)。）
+ * gDPSetTextureOverrideDjui 的宽高参数是边长的 log2，gfx_pc.c 会左移
+ * 还原为纹素数，因此纹理边长必须是 2 的幂。gDPLoadTextureBlockWithoutTexture
+ * 的宽高是纹素数，两者必须表示同一张纹理。
  */
 static void bind_glyph_texture(const GlyphSlot* g) {
-    gDPLoadTextureBlockWithoutTexture(gDisplayListHead++, NULL, G_IM_FMT_RGBA, G_IM_SIZ_16b,
+    gDPLoadTextureBlockWithoutTexture(gDisplayListHead++, NULL, G_IM_FMT_IA, G_IM_SIZ_8b,
         g->tw, g->th, 0, G_TX_CLAMP, G_TX_CLAMP, 0, 0, 0, 0);
     gDPSetTextureOverrideDjui(gDisplayListHead++, g->tex,
-        g->twLog2, g->thLog2, G_IM_FMT_RGBA, G_IM_SIZ_32b);
+        g->twLog2, g->thLog2, G_IM_FMT_IA, G_IM_SIZ_8b);
     *(gDisplayListHead++) = (Gfx) gsSPExecuteDjui(G_TEXOVERRIDE_DJUI);
     sBoundTex = g->tex;
 }
@@ -1305,35 +1232,17 @@ static void bind_glyph_texture(const GlyphSlot* g) {
 // Emoji（离线烘焙的 RGBA 图集）
 ///////////////////////////////////////////////////////////////////////////////
 /*
- * 为什么 Emoji 不走字体链：原版 emoji 字体（Noto-3D-128.ttf）**只有位图没有
- * 轮廓**（`glyf` 仅 103KB，`sbix` 147MB），而 stb_truetype **完全不支持**
- * sbix / CBDT / COLR。所以现代 emoji 只能离线烘焙成图集内嵌
- * （见 tools/make_emoji_atlas.py）。
+ * 原版 Emoji 字体使用 sbix 位图而不是轮廓，stb_truetype 不支持 sbix、
+ * CBDT 和 COLR，因此彩色 Emoji 由 tools/make_emoji_atlas.py 离线生成图集。
  *
- * 图集布局与内嵌格式全部由生成头文件里的宏描述：
- *   DJUI_MODERN_EMOJI_COUNT   emoji 个数（tile 0 .. COUNT-1，**emoji 图集**）
- *   DJUI_MODERN_FLAG_COUNT    国旗条数（tile 0 .. FLAG-1，**国旗图集**，独立编号）
- *   DJUI_MODERN_EMOJI_GRID_X/Y 每行/每列多少格（两张图共用）
- *   DJUI_MODERN_EMOJI_TILE    每格边长（像素，两张图共用）
- *   DJUI_MODERN_EMOJI_DIM_X/Y 整图边长（像素，均为 2 的幂，两张图共用）
- *   DJUI_MODERN_EMOJI_ATLAS_PNG / DJUI_MODERN_FLAG_ATLAS_PNG
- *                             1 = PNG 内嵌，0 = 裸 RGBA32
- *
- * tile 下标就是码点 / RI 对在各自升序表里的位置，所以 C 侧不需要额外的哈希
- * 表，二分查找即可。两张图的唯一区别是**数据指针**，渲染时换掉绑定即可。
+ * tile 下标等于码点在升序表中的位置，查找使用二分搜索。Emoji 与国旗是
+ * 两张独立图集，染色的 RGBA 数据不能改为单通道纹理。
  */
 
 #if defined(DJUI_MODERN_EMOJI_COUNT)
 /*
- * 把内嵌图集准备好（PNG 解成 RGBA32）。
- *
- * 为什么要存 PNG 而不是裸 RGBA32：
- *   裸 RGBA32 在 C 头文件里是 5 字符/字节，体积与编译时间都扛不住
- *   （512×512 是 1MB 原始 → 5MB 文本；裸存的 8MB 图集 → 40MB 级）。
- *   PNG 无损压到原始的 1/4 左右，代价只是启动时解一次（几十毫秒）。
- *
- * 失败时**不致命**：sEmojiAtlasRGBA 保持 NULL ⇒ djui_modern_emoji_available
- * 返回 false ⇒ 全部 emoji 自动交回原版绘制。
+ * 内嵌图集以 PNG 保存，启动时解码为 RGBA32。解码失败时图集指针保持空，
+ * 渲染回退到原版 Emoji。
  */
 static void emoji_atlas_prepare(void) {
 #if DJUI_MODERN_EMOJI_ATLAS_PNG
@@ -1421,11 +1330,8 @@ static s32 emoji_tile_for(u32 cp) {
 static bool is_regional_indicator(u32 cp) { return cp >= RI_FIRST && cp <= RI_LAST; }
 
 /*
- * RI 对 -> **国旗图集**里的 tile 下标（`sDjuiModernFlagKeys[]` 升序，二分查找）；
- * 没有则 -1。
- *
- * ⚠ 下标是**国旗图集内部**的编号（0 .. FLAG_COUNT-1），不再叠加
- *   DJUI_MODERN_EMOJI_COUNT —— 国旗是独立的一张图集。
+ * 返回国旗图集内的 tile 下标，未找到时返回 -1。
+ * 下标从零开始，不叠加 Emoji 图集的条目数。
  */
 static s32 flag_tile_for(u32 ri1, u32 ri2) {
     if (DJUI_MODERN_FLAG_COUNT == 0) { return -1; }
@@ -1517,7 +1423,7 @@ static s32 flag_tile_at(const char* c) {
 #endif
 }
 
-/* 这个字符是否由**现代 emoji 图集**负责绘制（否则交回原版）。 */
+/* 返回该字符是否由现代 Emoji 图集绘制。 */
 bool djui_modern_emoji_available(const char* c) {
 #if defined(DJUI_MODERN_EMOJI_COUNT)
     if (!gDjuiModernConfig.emojiModern || c == NULL || *c == '\0') { return false; }
@@ -1557,9 +1463,8 @@ bool djui_modern_unicode_accepts(const char* text) {
 
 #if defined(DJUI_MODERN_EMOJI_COUNT)
 /*
- * 画一个 tile。`atlas` 是**运行时 RGBA32 缓冲**（emoji 图集或国旗图集之一），
- * `idx` 是**该图集内部**的 tile 下标。两张图布局一致，所以几何与 UV 完全共用，
- * 只有绑定的数据指针不同。
+ * 绘制一个 tile。atlas 是 Emoji 或国旗的 RGBA32 缓冲，idx 是该图集内的
+ * tile 下标。两张图布局一致，几何与 UV 共用，只有数据指针不同。
  */
 static void emoji_render_tile(const u8* atlas, s32 idx) {
     if (atlas == NULL) { return; }
@@ -1595,10 +1500,7 @@ static void emoji_render_tile(const u8* atlas, s32 idx) {
     vtx[2].v.ob[0] = x0; vtx[2].v.ob[1] = y1; vtx[2].v.tc[0] = u0; vtx[2].v.tc[1] = v1;
     vtx[3].v.ob[0] = x1; vtx[3].v.ob[1] = y1; vtx[3].v.tc[0] = u1; vtx[3].v.tc[1] = v1;
 
-    /*
-     * 纹理绑定：整张图集只上传一次（地址恒定、内容不可变，与字形纹理同一套前提）。
-     * 键是**运行时缓冲的地址**（PNG 解出来的那份），不是内嵌数组。
-     */
+    // 图集内容不可变，按运行时缓冲地址跳过重复绑定。
     if (sBoundTex != atlas) {
         gDPLoadTextureBlockWithoutTexture(gDisplayListHead++, NULL, G_IM_FMT_RGBA, G_IM_SIZ_16b,
             DJUI_MODERN_EMOJI_DIM_X, DJUI_MODERN_EMOJI_DIM_Y, 0, G_TX_CLAMP, G_TX_CLAMP, 0, 0, 0, 0);
@@ -1635,12 +1537,7 @@ void djui_modern_font_atlas_render_begin(void) {
     gDPSetTexturePersp(gDisplayListHead++, G_TP_NONE);
     gSPTexture(gDisplayListHead++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
 
-    /*
-     * 这里**不再绑定图集**：绑定已下沉到每个字形（见 bind_glyph_texture）。
-     *
-     * 上一个 render_begin 与本 begin 之间可能画过圆角矩形等使用别的纹理的
-     * 几何，所以"当前已绑定的字形纹理"必须失效，否则会拿上一次的纹理画字。
-     */
+    // 绑定时机在单个字形内，开新一批文字时必须清除上次的绑定缓存。
     sBoundTex = NULL;
 
     // 纹理裁剪换算的扫描起点（见 glyph_fix_pending_clip）
@@ -1662,7 +1559,7 @@ void djui_modern_font_atlas_render_end(void) {
 }
 
 void djui_modern_font_atlas_render_char(const char* c) {
-    if (!sReady || sSlotGrid == NULL || c == NULL || *c == '\0') { return; }
+    if (!sReady || sGlyphSets == NULL || c == NULL || *c == '\0') { return; }
     if (*c == ' ' || *c == '\n' || *c == '\t') { return; }
 
 #if defined(DJUI_MODERN_EMOJI_COUNT)
@@ -1693,8 +1590,10 @@ void djui_modern_font_atlas_render_char(const char* c) {
     const u32 cp = djui_modern_font_utf8_decode(c, &bytes);
     if (cp == 0) { return; }
 
-    // 1) 字符集下标（查不到时使用回退槽显示 '?'）
-    const s32 ci = charset_lookup(cp);
+    // 1) 字符集下标（查不到时使用回退字符）
+    s32 ci = charset_lookup(cp);
+    if (ci < 0) { ci = charset_lookup('?'); }
+    if (ci < 0) { glyph_consume_pending_clip(); return; }
     sCur = &sFaces[(sCharsetFace[ci] < sFaceCount) ? sCharsetFace[ci] : 0];
 
     // 2) 档位
@@ -1707,15 +1606,14 @@ void djui_modern_font_atlas_render_char(const char* c) {
     const s32 bi = bucket_index_for_em(em);
     const s32 bucket = kRasterBuckets[bi];
 
-    // 3) 槽位（已光栅化的直接使用；其他槽位按需光栅化）
-    //    该字符首次被用到时才会为它分配一整行（见 slot_at）
+    // 3) 槽位（已光栅化的直接使用；其他槽位按需分配）
     GlyphSlot* g = slot_at(ci, bi);
     if (g == NULL) {
         glyph_consume_pending_clip();
         return;
     }
     if (g->state == 0) {
-        slot_rasterize(g, sCharset[ci], bucket, (s32)sCharsetFace[ci]);
+        slot_rasterize(g, sCharHash[ci], bucket, (s32)sCharsetFace[ci]);
     }
     if (g->state != 1 || g->bw <= 0 || g->bh <= 0 || g->tex == NULL) {
         // 无墨迹 / 生成失败：本帧不画，但同样要消费掉待处理裁剪（见上面的说明）
@@ -1736,11 +1634,6 @@ void djui_modern_font_atlas_render_char(const char* c) {
     const f32 y0 = sBaselineY + (-(f32)g->yoff) * invRaster;
     const f32 y1 = sBaselineY - ((f32)(g->yoff + g->bh)) * invRaster;
 
-    /*
-     * UV：顶点 tc 是 S10.5 定点（纹素 << 5）。
-     * 字形位图对齐在自己的小纹理左上角，所以 UV 就是 (0,0)-(bw,bh) 纹素，
-     * 最大 256<<5 = 8192，离 short 上限 32767 很远，不存在溢出。
-     */
     const u16 u0 = 0;
     const u16 u1 = (u16)((u32)g->bw << 5);
     const u16 v0 = 0;
@@ -1761,15 +1654,13 @@ void djui_modern_font_atlas_render_char(const char* c) {
     vtx[2].v.ob[0] = x0; vtx[2].v.ob[1] = y1; vtx[2].v.tc[0] = u0; vtx[2].v.tc[1] = v1;
     vtx[3].v.ob[0] = x1; vtx[3].v.ob[1] = y1; vtx[3].v.tc[0] = u1; vtx[3].v.tc[1] = v1;
 
-    // 5) 纹理绑定（连续相同字形跳过；不同字形必须重绑，见文件头说明）
     if (sBoundTex != g->tex) {
         bind_glyph_texture(g);
     }
 
     /*
-     * 6) 把 djui_text 设下的待处理纹理裁剪换算到**本字形四边形**的坐标
-     *    （四边形 = 墨迹盒 [x0, x1]，字格宽 = DJUI_MODERN_FONT_CELL_W）。
-     *    水平精确、垂直清零 —— 见 glyph_fix_pending_clip 的说明。
+     * 把待处理的纹理裁剪换算到当前字形四边形的坐标。水平按墨迹盒换算，
+     * 垂直只对聊天框保留裁剪。
      */
     glyph_fix_pending_clip(x0, x1 - x0, y0, y0 - y1);
 

@@ -51,9 +51,8 @@ void djui_modern_rrect_draw(struct DjuiBaseRect* clip,
                             u8 alphaScale);
 
 /*
- * 该矩形在给定半径策略与边框宽度下的**外轮廓半径**（可见半径 + 边框宽度，
- * 按短边一半封顶）。投影之类的"贴在控件外侧"的图形要用它，否则角部会比
- * 控件轮廓更尖锐，并超出圆角外侧。
+ * 返回给定半径策略与边框宽度下的外轮廓半径，即可见半径加边框宽度，
+ * 并按短边一半封顶。绘制控件外侧的阴影时需要使用该值。
  */
 f32 djui_modern_rrect_outer_radius(struct DjuiBaseRect* comp,
                                    enum DjuiModernRadius radiusKind,

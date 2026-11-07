@@ -16,14 +16,12 @@ E. 国旗（可选，用 `--flags <国旗字体>` 另给一份）
 
 图集边长限制
 ------------
-N64 的 `Vtx.tc` 是 **signed 16-bit 的 S10.5 定点**（纹素 << 5），
-可表达的最大正值是 32767 ⇒ **边长 ≤ 32767/32 = 1023 texel**。
-边长 1024 就已经溢出 1（1024<<5 = 32768 → 变成 -32768），CLAMP 到 0 后
-采样会完全错位，表现为单个表情被重复渲染，且宽度各占一半。
+N64 的 Vtx.tc 是 signed 16-bit 的 S10.5 定点（纹素左移 5 位），最大正值
+为 32767，因此边长上限为 1023 texel。边长 1024 时 UV 溢出为负值并被
+CLAMP 到 0，采样错位。
 
-所以一张图的 POT 边长最大只能是 **512**；单张 512×512（每格 32）最多
-256 格。emoji(179) + 国旗(251) 一共 430 格装不进一张图 ⇒
-**必须拆成两张独立的 512×512 图集**：
+一张图的 POT 边长最大为 512，单张 512×512（每格 32）最多容纳 256 格。
+Emoji 179 格与国旗 251 格合计 430 格，因此拆成两张独立的 512×512 图集：
   · emoji 图集 → `djui_modern_emoji_data.h`（含 DIM/LOG2/GRID/TILE 宏）
   · 国旗图集 → `djui_modern_flag_data.h`（布局与前者完全一致，共用同一套宏）
 
@@ -32,15 +30,15 @@ N64 的 `Vtx.tc` 是 **signed 16-bit 的 S10.5 定点**（纹素 << 5），
     grid_x x grid_y 格（两边都是 2 的幂，尽量接近方形），每格 size x size
     · emoji：tile 下标 = 该码点在 `sDjuiModernEmojiCodepoints[]`（升序）里的下标
     · 国旗：tile 下标 = 该 RI 对在 `sDjuiModernFlagKeys[]`（升序）里的下标
-      键 = (ri1-0x1F1E6)*26 + (ri2-0x1F1E6)。两张图**各自独立编号、都从 0 开始**。
+      键 = (ri1-0x1F1E6)*26 + (ri2-0x1F1E6)。两张图各自独立编号，均从 0 开始。
     C 侧二分查找即可，不需要额外的哈希表。
 
 存储格式
 --------
-    `--format png`（默认）：把整张图集编码成 PNG，再以**十六进制字节数组**内嵌。
+    --format png（默认）：把整张图集编码成 PNG，以十六进制字节数组内嵌。
     PNG 是无损压缩，彩色 emoji 图集能压到原来的 1/6 左右，编译时间和二进制
     体积都大幅下降；运行时用 stb_image（gfx_pc.c 已编译了实现）解一次。
-    `--format raw`：直接内嵌 RGBA32 字节（兼容旧行为，体积大得多）。
+    --format raw：内嵌 RGBA32 字节，体积显著增大。
 """
 
 import io
@@ -80,17 +78,13 @@ def parse_original_codepoints(path: str) -> list:
 
 RI_FIRST, RI_LAST = 0x1F1E6, 0x1F1FF   # Regional Indicator A..Z
 
-# ⚠ 图集边长的**硬上限**：N64 `Vtx.tc` 是 signed 16-bit 的 S10.5 定点
-# （纹素 << 5），可表达的最大正值是 32767 ⇒ 边长 ≤ 32767/32 = 1023 texel。
-# 边长 1024 就已经溢出 1（1024<<5 = 32768 → -32768），会被 CLAMP 到 0，
-# 采样会完全错位，导致单个表情被重复渲染，宽度各占一半。
-# POT 边长因此最大只能是 512。
+# N64 Vtx.tc 是 signed 16-bit 的 S10.5 定点，边长上限为 1023 texel。
+# POT 边长上限为 512。
 MAX_DIM = 1023
 
 
 def _glyph_to_codepoint(font):
-    """字形名 -> 码点。用它把 GSUB 连字里的字形名还原成码点，
-    这样**完全不依赖字形名是否可读**（子集化常把名字改成 glyphNNNNN）。"""
+    """返回字形名的反向码点表，子集化后的 glyphNNNNN 名称也可解析。"""
     rev = {}
     for cp, gn in font.getBestCmap().items():
         rev.setdefault(gn, cp)
@@ -98,17 +92,11 @@ def _glyph_to_codepoint(font):
 
 
 def collect_flags(font, strike):
-    """从 GSUB 连字表取出国旗：返回 [( (ri1, ri2), glyph ), ...]。
+    """从 GSUB 连字表返回国旗序列与字形。
 
-    为什么读连字表而不是读字形名
-    ----------------------------
-    Unicode 国旗 = **两个 Regional Indicator 的序列**（🇨🇳 = U+1F1E8 U+1F1F3），
-    字体里靠 `ccmp` 特性下的一条 LigatureSubst 把它们合成一个旗子字形。
-    也就是说"哪两个字母 = 哪面旗"这条信息**只存在于连字表里**，
-    与字形叫什么名字无关 —— 所以连字表才是唯一权威来源。
-
-    本函数扫全部 lookup，凡是"首字与组件都是 Regional Indicator"的连字都收下；
-    `ExtSubTable`（type 7 扩展）会自动展开。找不到任何连字时返回 None。
+    Unicode 国旗由两个 Regional Indicator 组成，字体通过 ccmp 特性的
+    LigatureSubst 将它们合成为旗子字形。序列信息只存在于连字表中，
+    与字形名称无关。ExtSubTable 会自动展开，未找到连字时返回 None。
     """
     if "GSUB" not in font:
         return None
@@ -149,17 +137,14 @@ def collect_flags(font, strike):
 
 
 def dedupe_flags(pairs):
-    """去重：同一面旗被多个 RI 对命中时只保留**最小键**的那一对（ISO 顺序）。
+    """去重：同一面旗被多个 RI 对命中时只保留键最小的一对。
 
     Returns [(pair, glyph), ...] sorted by key.
 
-    为何去重（而非保留全部别名）：
-    国旗图集必须装进 ≤1023 texel 的方形图（SIDE 内 Vtx.tc 是 signed 16-bit，
-    最大可寻址 1023 texel；超过则 UV 溢出成负、CLAMP 后采样错位）。
-    拆成两张 512×512 图集后，每张只能装 256 tile —— 179 emoji 占满一张，
-    留给国旗只剩 251 格（去重后） / 259 格（不去重）。为避免溢出，
-    宁可在 8 个**非主流属地代码**上妥协（输入如 "UM" 看不到 US 旗，
-    但输 "US" 正常 —— 因为用的是同一张图）。"""
+    国旗图集边长上限为 1023 texel。拆成两张 512×512 图集后，
+    每张最多容纳 256 tile，179 个 Emoji 占满一张，国旗余量为
+    251 格（去重）或 259 格（保留别名）。保留 251 格可避免溢出，
+    代价是输入 "UM" 无法显示 US 国旗，输入 "US" 仍正常。"""
     from collections import defaultdict
     g2pairs = defaultdict(list)
     for p, g in pairs:
@@ -202,13 +187,9 @@ def _dump_byte_array(blob, per_line=20):
 
 
 def safe_grid(count, size):
-    """返回 (gx, gy)：能装下 count 格、且**两边边长都不超过 S10.5 上限**的 POT 网格。
+    """返回容纳 count 格且不超过 S10.5 上限的 POT 网格。
 
-    ⚠ 这是整个图集的**硬约束**：N64 `Vtx.tc` 是 signed 16-bit 的 S10.5 定点
-    （纹素 << 5），可表达的最大正值是 32767 ⇒ 边长 ≤ 1023 texel。
-    边长 1024 时末尾 tile 的 UV 会溢出成负、被 CLAMP 到 0，采样完全错位
-    （表现为单个表情被重复渲染，且宽度各占一半）。
-    POT 边长因此最大只能是 **512**（1024 差 1 就溢出）。
+    Vtx.tc 的最大正值对应 1023 texel，POT 边长上限为此取 512。
     """
     cap = MAX_DIM // size
     if cap < 1:
@@ -270,7 +251,7 @@ def write_emoji_header(path, cps, blob, blob_kind, atlas_png, size, gx, gy,
 def write_flag_header(path, flags, blob, blob_kind, atlas_png, size, gx, gy,
                       dim_x, dim_y, src_font, src_ppem, cmd):
     """`flags` = 去重后的 [( (ri1,ri2), glyph ), ...]，已按 key 升序。
-    tile 下标 = 在该数组里的下标（**国旗图集独立编号，从 0 开始**）。"""
+    tile 下标等于该数组中的位置，国旗图集独立编号并从 0 开始。"""
     keys = [(p[0] - RI_FIRST) * 26 + (p[1] - RI_FIRST) for p, _ in flags]
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         w = f.write
@@ -287,7 +268,7 @@ def write_flag_header(path, flags, blob, blob_kind, atlas_png, size, gx, gy,
           f"展开后 {dim_x * dim_y * 4} 字节。\n")
         w(f"// 共 {len(flags)} 面国旗（已按 glyph 去重，丢掉非主流属地别名）。\n")
         w("//\n")
-        w("// 图集尺寸/网格与 emoji 图集**共用同一套宏**（两张图布局一致），\n")
+        w("// 图集尺寸与网格宏与 Emoji 图集共用，两张图布局一致。\n")
         w("// 所以这里不再重复定义 DIM / LOG2 / GRID / TILE。\n")
         w("// ============================================================================\n\n")
         w("#pragma once\n\n")
@@ -298,7 +279,7 @@ def write_flag_header(path, flags, blob, blob_kind, atlas_png, size, gx, gy,
         w(f"#define DJUI_MODERN_FLAG_ATLAS_SIZE {len(blob)}\n\n")
         w("/*\n")
         w(" * 国旗键表（升序）：key = (ri1-0x1F1E6)*26 + (ri2-0x1F1E6)，\n")
-        w(" * 下标 j 就是**国旗图集**里的 tile 下标（独立编号，从 0 开始）。\n")
+        w(" * 下标 j 是国旗图集内的 tile 下标，独立编号并从 0 开始。\n")
         w(" */\n")
         w("static const unsigned short sDjuiModernFlagKeys[] = {\n")
         for i in range(0, len(keys), 12):

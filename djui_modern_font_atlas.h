@@ -1,6 +1,10 @@
 #pragma once
 #include "pc/djui/djui.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * 矢量字形后端。
  * 字形按字符与屏幕字号分档光栅化，每个槽位对应一张不可变纹理。
@@ -13,6 +17,9 @@ void djui_modern_font_atlas_frame_begin(void);
 void djui_modern_font_atlas_pass_begin(void);
 bool djui_modern_font_atlas_ready(void);
 const char* djui_modern_font_atlas_name(void);
+
+/* 返回内嵌中文字体数据，供 ImGui 构建字体图谱；未加载时返回 NULL。 */
+const unsigned char* djui_modern_font_atlas_cjk_data(unsigned int* size);
 void djui_modern_font_atlas_stats(u32* atlasPixels, u32* glyphCount, u32* uploads);
 
 // 返回 em 相对宽度；字偶间距通过前瞻下一个字符计算。
@@ -44,3 +51,7 @@ bool djui_modern_unicode_accepts(const char* text);
 void djui_modern_note_text_base(struct DjuiBase* base);
 
 void djui_modern_font_atlas_set_cell_height(f32 h);
+
+#ifdef __cplusplus
+}
+#endif

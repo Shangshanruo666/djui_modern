@@ -1,32 +1,38 @@
 #!/usr/bin/env python3
-"""将完整字体子集化到原版字表定义的字符范围。
+"""将完整字体子集化到按 Unicode 区段定义的字符范围。
 
 用法:
     python src/pc/djui_modern/tools/make_subset_font.py <源字体> <输出字体>
-        [--han LEVEL] [--glyph-source PATH] [--exclude-font PATH]
-        [--codepoints PATH]
+        [--han LEVEL] [--exclude-font PATH] [--codepoints PATH]
 
-字符范围以原版字表为基准：djui_unicode.c 的 sSmCodeGlyphs 提供西文字符，
-cn_glyphs.h 提供汉字和中文标点。子集覆盖原版字表的全部字符。
+收录范围由下列区段给出，覆盖中文、日文与西文的界面文本、玩家命名和
+mod 文本：
 
-原版字表之外另有一组补充字符：GB2312 不收录的全角字母数字、表意空格和
-常用货币与数学符号。中文排版、mod 文本和玩家命名会用到这些字符，因此一并
-纳入子集。
+    U+0020-U+007E  ASCII 可见区
+    U+0080-U+00FF  Latin-1 Supplement
+    U+0100-U+017F  Latin Extended-A
+    U+0180-U+024F  Latin Extended-B
+    U+0400-U+04FF  Cyrillic
+    U+0500-U+052F  Cyrillic Supplement
+    U+2000-U+206F  General Punctuation
+    U+3000-U+303F  CJK 标点及全角空格
+    U+3040-U+30FF  平假名与片假名
+    U+3400-U+4DBF  CJK 扩展 A
+    U+4E00-U+9FFF  CJK 基本区
+    U+FF01-U+FF5E  全角形式常用子集
+    U+FF66-U+FF9D  半角片假名
 
 思源黑体 / 思源宋体的 OTF 通常为 15~20MB。直接内嵌为 C 头文件会膨胀到
 约 4 倍（60MB+），显著增大仓库体积和构建时间。子集化后通常只剩 1~3MB。
 
---han 取值:
-    gb2312   GB2312 全部汉字，6763 字（默认，推荐）
-    common   常用 3500 字（GB2312 一级字库），体积更小
-    none     只要 ASCII + 标点
+--han 保留用于缩小汉字范围，默认 none 表示只收录上表中的区段：
+    none      按区段表收录（默认）
+    cjk       U+3400-U+4DBF 与 U+4E00-U+9FFF 全部汉字
+    gb2312    GB2312 全部汉字，6763 字
+    common    常用 3500 字（GB2312 一级字库），体积更小
 
 --exclude-font 用于排除另一字体已经提供的码点。生成中文字体子集时传入
 RobotoCondensed-Subset.ttf，可避免重复内嵌 Roboto 已有的 ASCII 和标点。
-
---glyph-source 指定游戏字表文件。传入 src/pc/djui/djui_unicode.c 时读取
-sSmCodeGlyphs 主表，传入 src/pc/djui/cn_glyphs.h 时读取汉字和中文标点。
-两个文件都传入时取并集。
 
 --codepoints 指定码点列表文件，每行一个十进制或十六进制码点。
 位图字体（sbix 表）没有可用的字符范围，需要用该选项显式给出收录范围。
@@ -36,25 +42,25 @@ sSmCodeGlyphs 主表，传入 src/pc/djui/cn_glyphs.h 时读取汉字和中文�
 """
 
 import os
-import re
 import sys
-import unicodedata
 
 
-# 原版字表与 GB2312 均不收录的字符。中文排版、mod 文本和玩家命名会用到，
-# 缺字时回退为问号。
-SUPPLEMENT_CHARS = (
-    "　"
-    "、。，．！？；：（）〔〕【】〖】《》〈〉"
-    "「」『』"
-    "‘’“”…—～·"
-    "！＂＃＄％＆＇（）＊＋，－．／"
-    "０１２３４５６７８９：；＜＝＞？"
-    "＠ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ"
-    "［＼］＾＿｀ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
-    "€£¥©®°±×÷§¶µ¢"
+# 收录区段。顺序与文档一致，覆盖西文、标点、假名与汉字。
+CHARSET_RANGES = (
+    (0x0020, 0x007E),
+    (0x0080, 0x00FF),
+    (0x0100, 0x017F),
+    (0x0180, 0x024F),
+    (0x0400, 0x04FF),
+    (0x0500, 0x052F),
+    (0x2000, 0x206F),
+    (0x3000, 0x303F),
+    (0x3040, 0x30FF),
+    (0x3400, 0x4DBF),
+    (0x4E00, 0x9FFF),
+    (0xFF01, 0xFF5E),
+    (0xFF66, 0xFF9D),
 )
-
 
 def gb2312_hanzi(level):
     """返回 GB2312 编码里定义的汉字集合。"""
@@ -77,46 +83,20 @@ def gb2312_hanzi(level):
     return out
 
 
-def gb2312_symbols():
-    out = set()
-    for hi in range(0xA1, 0xAA):
-        for lo in range(0xA1, 0xFF):
-            try:
-                ch = bytes([hi, lo]).decode("gb2312")
-            except UnicodeDecodeError:
-                continue
-            if unicodedata.category(ch)[0] in ("P", "S"):
-                out.add(ch)
-    return out
+def cjk_unified_hanzi():
+    """返回 U+3400-U+4DBF 与 U+4E00-U+9FFF 的全部码点。"""
+    return {chr(cp) for cp in range(0x3400, 0x4DC0)} | \
+           {chr(cp) for cp in range(0x4E00, 0xA000)}
 
 
-def load_game_chars(path):
-    with open(path, encoding="utf-8") as f:
-        source = f.read()
-
+def build_text(level, excluded_codepoints=None):
     chars = set()
-    for match in re.finditer(r'\{ "([^"]+)"', source):
-        chars.update(match.group(1))
-    if not chars:
-        raise ValueError("no glyph entries found in %s" % path)
-    return chars
+    for lo, hi in CHARSET_RANGES:
+        chars |= {chr(cp) for cp in range(lo, hi + 1)}
 
-
-def build_text(level, glyph_sources=None, excluded_codepoints=None):
-    chars = set()
-
-    for cp in range(0x20, 0x7F):
-        chars.add(chr(cp))
-
-    chars |= set(SUPPLEMENT_CHARS)
-    chars |= gb2312_symbols()
-
-    for path in glyph_sources or []:
-        chars |= load_game_chars(path)
-
-    if level != "none":
-        if not glyph_sources:
-            raise ValueError("--glyph-source is required for han level %s" % level)
+    if level == "cjk":
+        chars |= cjk_unified_hanzi()
+    elif level in ("gb2312", "common"):
         chars |= gb2312_hanzi(level)
 
     if excluded_codepoints:
@@ -128,8 +108,7 @@ def build_text(level, glyph_sources=None, excluded_codepoints=None):
 def parse_args(argv):
     src = None
     dst = None
-    level = "gb2312"
-    glyph_sources = []
+    level = "cjk"
     exclude_font = None
     codepoints_file = None
     i = 0
@@ -144,11 +123,6 @@ def parse_args(argv):
             if i + 1 >= len(argv):
                 raise ValueError("--exclude-font requires a path")
             exclude_font = argv[i + 1]
-            i += 2
-        elif arg == "--glyph-source":
-            if i + 1 >= len(argv):
-                raise ValueError("--glyph-source requires a path")
-            glyph_sources.append(argv[i + 1])
             i += 2
         elif arg == "--codepoints":
             if i + 1 >= len(argv):
@@ -168,10 +142,10 @@ def parse_args(argv):
 
     if src is None or dst is None:
         raise ValueError("source and output font paths are required")
-    if level not in ("gb2312", "common", "none"):
-        raise ValueError("--han must be one of gb2312/common/none")
+    if level not in ("cjk", "gb2312", "common", "none"):
+        raise ValueError("--han must be one of cjk/gb2312/common/none")
 
-    return src, dst, level, glyph_sources, exclude_font, codepoints_file
+    return src, dst, level, exclude_font, codepoints_file
 
 
 def load_codepoint_list(path):
@@ -199,7 +173,7 @@ def load_codepoints(path):
 
 def main():
     try:
-        src, dst, level, glyph_sources, exclude_font, codepoints_file = parse_args(sys.argv[1:])
+        src, dst, level, exclude_font, codepoints_file = parse_args(sys.argv[1:])
     except ValueError as exc:
         print("error: %s" % exc, file=sys.stderr)
         print(__doc__)
@@ -208,7 +182,6 @@ def main():
     if not os.path.isfile(src):
         print("error: %s not found" % src, file=sys.stderr)
         return 1
-    for path in glyph_sources:
         if not os.path.isfile(path):
             print("error: %s not found" % path, file=sys.stderr)
             return 1
@@ -233,14 +206,12 @@ def main():
         excluded_count = len(excluded_codepoints)
     else:
         try:
-            text = build_text(level, glyph_sources, excluded_codepoints)
+            text = build_text(level, excluded_codepoints)
         except ValueError as exc:
             print("error: %s" % exc, file=sys.stderr)
             return 1
         excluded_count = len(excluded_codepoints)
     print("source : %s (%d bytes)" % (src, os.path.getsize(src)))
-    for path in glyph_sources:
-        print("glyphs : %s" % path)
     if exclude_font:
         print("exclude: %s (%d mapped codepoints)" % (exclude_font, len(excluded_codepoints)))
     if codepoints_file:
@@ -288,14 +259,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-SUPPLEMENT_CHARS = (
-    "　"
-    "、。，．！？；：（）〔〕【】〖】《》〈〉"
-    "「」『』"
-    "‘’“”…—～·"
-    "！＂＃＄％＆＇（）＊＋，－．／"
-    "０１２３４５６７８９：；＜＝＞？"
-    "＠ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ"
-    "［＼］＾＿｀ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
-    "€£¥©®°±×÷§¶µ¢"
-)
