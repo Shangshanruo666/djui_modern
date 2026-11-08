@@ -12,57 +12,46 @@ struct DjuiModernConfig gDjuiModernConfig;
 
 static bool sConfigLoaded = false;
 
-static void djui_modern_config_defaults(void) {
-    gDjuiModernConfig.enabled      = true;
+void djui_modern_config_set_defaults(struct DjuiModernConfig* cfg) {
+    memset(cfg, 0, sizeof(*cfg));
+    cfg->enabled = true;
 
-    // 半径单位：320x240 DJUI 坐标。
-    gDjuiModernConfig.radiusPanel   = 12.0f;
-    gDjuiModernConfig.radiusElement = 8.0f;
-    gDjuiModernConfig.radiusPill    = -1.0f;  // < 0：使用高度的一半
+    cfg->radiusPanel = 12.0f;
+    cfg->radiusElement = 8.0f;
 
-    // 0：羊角螺线过渡；1：正圆弧。
-    gDjuiModernConfig.cornerRoundness = 0.90f;
+    cfg->cornerRoundness = 0.90f;
 
-    gDjuiModernConfig.panelAlpha   = 244;
-    gDjuiModernConfig.elementAlpha = 208;
-    gDjuiModernConfig.overlayAlpha = 176;
+    cfg->panelAlpha = 244;
+    cfg->elementAlpha = 208;
+    cfg->overlayAlpha = 176;
 
-    gDjuiModernConfig.gradients      = true;
-    gDjuiModernConfig.gradientTopBoost = 1.18f;
-    gDjuiModernConfig.gradientBotScale = 0.86f;
+    cfg->gradients = true;
+    cfg->gradientTopBoost = 1.18f;
+    cfg->gradientBotScale = 0.86f;
 
-    gDjuiModernConfig.showBorders  = true;
+    cfg->showBorders = true;
 
-    gDjuiModernConfig.fontEnabled  = true;
-    gDjuiModernConfig.fontPath[0]  = '\0';
+    cfg->fontEnabled = true;
 
-    // CJK 字形光栅尺寸倍率。
-    gDjuiModernConfig.fontRasterBoostCJK = 1.0f;
-    gDjuiModernConfig.fontBilinear = true;
+    cfg->fontRasterBoostCJK = 1.0f;
+    cfg->fontBilinear = true;
 
-    // true：使用字体原生字距；false：对齐原版点阵字体宽度。
-    gDjuiModernConfig.fontNativeMetrics = true;
+    cfg->fontNativeMetrics = true;
 
-    // 字体缺少字偶间距数据时使用内置兜底。
-    gDjuiModernConfig.fontFallbackKerning = true;
+    cfg->fontFallbackKerning = false;
 
-    // true：内嵌彩色 Emoji 图集；false：原版 Emoji。
-    gDjuiModernConfig.emojiModern = true;
+    cfg->emojiModern = true;
 
-    // 字形光栅尺寸倍率；不改变排版尺寸。
-    gDjuiModernConfig.textScale = 1.0f;
+    cfg->textScale = 1.0f;
 
-    // 指定面板是否使用矢量字体。
-    gDjuiModernConfig.fontPlayerList     = false;
-    gDjuiModernConfig.fontModDescription = false;
+    cfg->fontPlayerList = false;
+    cfg->fontModDescription = false;
 
-    // 默认替换槽 0（Normal）与槽 3（Aliased）。
     {
         static const u8 kDefaultFontSlots[] = { 0, 3 };
-        memcpy(gDjuiModernConfig.fontSlots, kDefaultFontSlots, sizeof(kDefaultFontSlots));
-        gDjuiModernConfig.fontSlotCount = (u8)(sizeof(kDefaultFontSlots) / sizeof(kDefaultFontSlots[0]));
+        memcpy(cfg->fontSlots, kDefaultFontSlots, sizeof(kDefaultFontSlots));
+        cfg->fontSlotCount = (u8)(sizeof(kDefaultFontSlots) / sizeof(kDefaultFontSlots[0]));
     }
-    gDjuiModernConfig.showStats = false;
 }
 
 static char* trim(char* s) {
@@ -90,72 +79,68 @@ static u8 parse_slot_list(const char* value, u8* out, u8 maxCount) {
         if (*p < '0' || *p > '9') { break; }
         int slot = 0;
         while (*p >= '0' && *p <= '9') { slot = slot * 10 + (*p - '0'); p++; }
-        if (slot >= 0 && slot < 8) { out[count++] = (u8)slot; }
+        if (slot >= 0 && slot < DJUI_MODERN_FONT_SLOT_COUNT) { out[count++] = (u8)slot; }
     }
     return count;
 }
 
-static void apply_kv(const char* key, const char* value) {
+static void apply_kv(struct DjuiModernConfig* cfg, const char* key, const char* value) {
     if (!strcasecmp(key, "enabled")) {
-        gDjuiModernConfig.enabled = parse_bool(value, gDjuiModernConfig.enabled);
+        cfg->enabled = parse_bool(value, cfg->enabled);
     } else if (!strcasecmp(key, "radius_panel")) {
-        gDjuiModernConfig.radiusPanel = (f32)atof(value);
+        cfg->radiusPanel = (f32)atof(value);
     } else if (!strcasecmp(key, "radius_element")) {
-        gDjuiModernConfig.radiusElement = (f32)atof(value);
-    } else if (!strcasecmp(key, "radius_pill")) {
-        gDjuiModernConfig.radiusPill = (f32)atof(value);
+        cfg->radiusElement = (f32)atof(value);
     } else if (!strcasecmp(key, "corner_roundness")) {
-        gDjuiModernConfig.cornerRoundness = (f32)atof(value);
-        if (gDjuiModernConfig.cornerRoundness < 0.0f) { gDjuiModernConfig.cornerRoundness = 0.0f; }
-        if (gDjuiModernConfig.cornerRoundness > 1.0f) { gDjuiModernConfig.cornerRoundness = 1.0f; }
+        cfg->cornerRoundness = (f32)atof(value);
+        if (cfg->cornerRoundness < 0.0f) { cfg->cornerRoundness = 0.0f; }
+        if (cfg->cornerRoundness > 1.0f) { cfg->cornerRoundness = 1.0f; }
     } else if (!strcasecmp(key, "panel_alpha")) {
-        gDjuiModernConfig.panelAlpha = (u8)clamp((s32)atoi(value), 0, 255);
+        cfg->panelAlpha = (u8)clamp((s32)atoi(value), 0, 255);
     } else if (!strcasecmp(key, "element_alpha")) {
-        gDjuiModernConfig.elementAlpha = (u8)clamp((s32)atoi(value), 0, 255);
+        cfg->elementAlpha = (u8)clamp((s32)atoi(value), 0, 255);
     } else if (!strcasecmp(key, "overlay_alpha")) {
-        gDjuiModernConfig.overlayAlpha = (u8)clamp((s32)atoi(value), 0, 255);
+        cfg->overlayAlpha = (u8)clamp((s32)atoi(value), 0, 255);
     } else if (!strcasecmp(key, "gradients")) {
-        gDjuiModernConfig.gradients = parse_bool(value, gDjuiModernConfig.gradients);
+        cfg->gradients = parse_bool(value, cfg->gradients);
     } else if (!strcasecmp(key, "gradient_top_boost")) {
-        gDjuiModernConfig.gradientTopBoost = (f32)atof(value);
+        cfg->gradientTopBoost = (f32)atof(value);
     } else if (!strcasecmp(key, "gradient_bottom_scale")) {
-        gDjuiModernConfig.gradientBotScale = (f32)atof(value);
+        cfg->gradientBotScale = (f32)atof(value);
     } else if (!strcasecmp(key, "show_borders")) {
-        gDjuiModernConfig.showBorders = parse_bool(value, gDjuiModernConfig.showBorders);
+        cfg->showBorders = parse_bool(value, cfg->showBorders);
     } else if (!strcasecmp(key, "font_enabled")) {
-        gDjuiModernConfig.fontEnabled = parse_bool(value, gDjuiModernConfig.fontEnabled);
+        cfg->fontEnabled = parse_bool(value, cfg->fontEnabled);
     } else if (!strcasecmp(key, "font_path")) {
-        snprintf(gDjuiModernConfig.fontPath, sizeof(gDjuiModernConfig.fontPath), "%s", value);
+        snprintf(cfg->fontPath, sizeof(cfg->fontPath), "%s", value);
     } else if (!strcasecmp(key, "font_cjk_raster_boost")) {
-        gDjuiModernConfig.fontRasterBoostCJK = (f32)atof(value);
+        cfg->fontRasterBoostCJK = (f32)atof(value);
     } else if (!strcasecmp(key, "font_bilinear")) {
-        gDjuiModernConfig.fontBilinear = parse_bool(value, gDjuiModernConfig.fontBilinear);
+        cfg->fontBilinear = parse_bool(value, cfg->fontBilinear);
     } else if (!strcasecmp(key, "font_native_metrics")) {
-        gDjuiModernConfig.fontNativeMetrics = parse_bool(value, gDjuiModernConfig.fontNativeMetrics);
+        cfg->fontNativeMetrics = parse_bool(value, cfg->fontNativeMetrics);
     } else if (!strcasecmp(key, "emoji")) {
-        // emoji = modern | vanilla（也接受 true/false 写法）
         if (!strcasecmp(value, "modern") || !strcasecmp(value, "new") ||
             !strcasecmp(value, "1") || !strcasecmp(value, "true")) {
-            gDjuiModernConfig.emojiModern = true;
+            cfg->emojiModern = true;
         } else if (!strcasecmp(value, "vanilla") || !strcasecmp(value, "original") ||
                    !strcasecmp(value, "0") || !strcasecmp(value, "false")) {
-            gDjuiModernConfig.emojiModern = false;
+            cfg->emojiModern = false;
         }
     } else if (!strcasecmp(key, "font_fallback_kerning")) {
-        gDjuiModernConfig.fontFallbackKerning = parse_bool(value, gDjuiModernConfig.fontFallbackKerning);
+        cfg->fontFallbackKerning = parse_bool(value, cfg->fontFallbackKerning);
     } else if (!strcasecmp(key, "font_slots")) {
-        const u8 n = parse_slot_list(value, gDjuiModernConfig.fontSlots, 8);
-        if (n > 0) { gDjuiModernConfig.fontSlotCount = n; }
+        cfg->fontSlotCount = parse_slot_list(value, cfg->fontSlots, DJUI_MODERN_FONT_SLOT_COUNT);
     } else if (!strcasecmp(key, "text_scale")) {
-        gDjuiModernConfig.textScale = (f32)atof(value);
-        if (gDjuiModernConfig.textScale < 0.5f) { gDjuiModernConfig.textScale = 0.5f; }
-        if (gDjuiModernConfig.textScale > 2.0f) { gDjuiModernConfig.textScale = 2.0f; }
+        cfg->textScale = (f32)atof(value);
+        if (cfg->textScale < 0.5f) { cfg->textScale = 0.5f; }
+        if (cfg->textScale > 2.0f) { cfg->textScale = 2.0f; }
     } else if (!strcasecmp(key, "font_player_list")) {
-        gDjuiModernConfig.fontPlayerList = parse_bool(value, gDjuiModernConfig.fontPlayerList);
+        cfg->fontPlayerList = parse_bool(value, cfg->fontPlayerList);
     } else if (!strcasecmp(key, "font_mod_description")) {
-        gDjuiModernConfig.fontModDescription = parse_bool(value, gDjuiModernConfig.fontModDescription);
+        cfg->fontModDescription = parse_bool(value, cfg->fontModDescription);
     } else if (!strcasecmp(key, "show_stats")) {
-        gDjuiModernConfig.showStats = parse_bool(value, gDjuiModernConfig.showStats);
+        cfg->showStats = parse_bool(value, cfg->showStats);
     }
 }
 
@@ -210,7 +195,6 @@ static const char kDefaultCfgText[] =
 "# 圆角半径，单位是 DJUI 的 320x240 虚拟坐标系像素。\n"
 "radius_panel   = 12     # 大面板\n"
 "radius_element = 8      # 普通控件\n"
-"radius_pill    = -1     # 胶囊元素（按钮/滑条）；-1 表示\"高度的一半\"\n"
 "\n"
 "# 圆角形状，范围 0.0 ~ 1.0。\n"
 "#   1.0 = 正圆弧\n"
@@ -251,7 +235,7 @@ static const char kDefaultCfgText[] =
 "font_native_metrics = true\n"
 "\n"
 "# 字体缺少字偶间距数据时，使用内置西文兜底表。\n"
-"font_fallback_kerning = true\n"
+"font_fallback_kerning = false\n"
 "\n"
 "# 用 TTF 替换哪些字体槽：\n"
 "#   0=Normal（DJUI 常规字体） 1=Title（DJUI 标题字体） 2=HUD 3=Aliased（DJUI 锐利字体）\n"
@@ -312,7 +296,7 @@ static size_t cfg_line_key(const char* s, const char* e, const char** keyOut) {
     return (size_t)(k1 - k0);
 }
 
-/* 用户文件中的配置项取值。 */
+/* 配置文件的键值缓存。 */
 struct CfgValue {
     char name[64];
     char value[320];
@@ -347,8 +331,8 @@ static const char* cfg_value_get(const char* name, size_t nameLen) {
     return NULL;
 }
 
-/* 解析用户文件并应用到运行期配置；文本保持不变，供后续比较。 */
-static void cfg_parse_text(const char* text) {
+/* 解析配置文件并写入指定配置结构。 */
+static void cfg_parse_text(struct DjuiModernConfig* cfg, const char* text) {
     sCfgValueCount = 0;
 
     const char* p = text;
@@ -375,12 +359,12 @@ static void cfg_parse_text(const char* text) {
         if (*name == '\0') { continue; }
 
         cfg_value_set(name, value);
-        apply_kv(name, value);
+        apply_kv(cfg, name, value);
     }
 }
 
 /*
- * 用默认模板重建全文，把每个配置项的默认值换成用户取值。
+ * 用默认模板重建全文，把每个配置项的默认值换成缓存中的取值。
  * 模板之外的配置项不写入，缺失项保留模板默认值。
  */
 static bool cfg_render(char* out, size_t cap) {
@@ -442,10 +426,24 @@ static bool config_write_text(const char* path, const char* text) {
     return true;
 }
 
+static bool config_read_text(const char* path, char* text, size_t capacity, bool* truncated) {
+    FILE* f = fopen(path, "r");
+    if (f == NULL) { return false; }
+
+    size_t length = 0;
+    while (length + 1 < capacity) {
+        if (fgets(text + length, (int)(capacity - length), f) == NULL) { break; }
+        length += strlen(text + length);
+    }
+    *truncated = !feof(f);
+    fclose(f);
+    return true;
+}
+
 void djui_modern_config_load(void) {
     if (sConfigLoaded) { return; }
     sConfigLoaded = true;
-    djui_modern_config_defaults();
+    djui_modern_config_set_defaults(&gDjuiModernConfig);
 
     const char* path = config_path();
     if (path == NULL) {
@@ -453,39 +451,136 @@ void djui_modern_config_load(void) {
         return;
     }
 
-    FILE* f = fopen(path, "r");
-    if (f == NULL) {
-        if (config_write_text(path, kDefaultCfgText)) {
-            LOG_INFO("djui_modern: wrote default config to %s", path);
+    const char* error = NULL;
+    if (!djui_modern_config_read(&gDjuiModernConfig, &error)) {
+        if (error != NULL && strcmp(error, "无法读取配置文件") == 0) {
+            if (config_write_text(path, kDefaultCfgText)) {
+                LOG_INFO("djui_modern: wrote default config to %s", path);
+            }
+            return;
         }
+        LOG_ERROR("djui_modern: config load failed: %s", error != NULL ? error : "unknown error");
         return;
     }
 
     static char current[CFG_TEXT_MAX];
-    size_t currentLen = 0;
-    while (currentLen + 1 < sizeof(current)) {
-        if (fgets(current + currentLen, (int)(sizeof(current) - currentLen), f) == NULL) { break; }
-        currentLen += strlen(current + currentLen);
-    }
-    const bool truncated = !feof(f);
-    fclose(f);
-
-    cfg_parse_text(current);
-
-    static char merged[CFG_TEXT_MAX];
-    if (!cfg_render(merged, sizeof(merged))) {
-        LOG_ERROR("djui_modern: config template exceeds %u bytes, file left unchanged",
-                  (u32)sizeof(merged));
-        return;
-    }
-
-    if (truncated) {
-        LOG_ERROR("djui_modern: config exceeds %u bytes, file left unchanged",
-                  (u32)sizeof(current));
-    } else if (strcmp(merged, current) != 0) {
-        if (config_write_text(path, merged)) {
-            LOG_INFO("djui_modern: config rewritten from template -> %s", path);
+    bool truncated = false;
+    if (config_read_text(path, current, sizeof(current), &truncated) && !truncated) {
+        static char merged[CFG_TEXT_MAX];
+        if (cfg_render(merged, sizeof(merged)) && strcmp(merged, current) != 0) {
+            if (config_write_text(path, merged)) {
+                LOG_INFO("djui_modern: config rewritten from template -> %s", path);
+            }
         }
     }
     LOG_INFO("djui_modern: loaded config from %s", path);
+}
+
+bool djui_modern_config_read(struct DjuiModernConfig* cfg, const char** error) {
+    if (error != NULL) { *error = NULL; }
+    if (cfg == NULL) {
+        if (error != NULL) { *error = "配置数据为空"; }
+        return false;
+    }
+
+    djui_modern_config_set_defaults(cfg);
+    const char* path = config_path();
+    if (path == NULL) {
+        if (error != NULL) { *error = "无法解析配置文件路径"; }
+        return false;
+    }
+
+    static char text[CFG_TEXT_MAX];
+    bool truncated = false;
+    if (!config_read_text(path, text, sizeof(text), &truncated)) {
+        if (error != NULL) { *error = "无法读取配置文件"; }
+        return false;
+    }
+    if (truncated) {
+        if (error != NULL) { *error = "配置文件超出大小上限"; }
+        return false;
+    }
+
+    cfg_parse_text(cfg, text);
+    return true;
+}
+
+/* 把配置结构序列化为模板取值，供保存写回。 */
+static void cfg_values_from_struct(const struct DjuiModernConfig* cfg) {
+    sCfgValueCount = 0;
+    char buf[320];
+
+    cfg_value_set("enabled", cfg->enabled ? "true" : "false");
+
+    snprintf(buf, sizeof(buf), "%.2f", cfg->radiusPanel);
+    cfg_value_set("radius_panel", buf);
+    snprintf(buf, sizeof(buf), "%.2f", cfg->radiusElement);
+    cfg_value_set("radius_element", buf);
+    snprintf(buf, sizeof(buf), "%.2f", cfg->cornerRoundness);
+    cfg_value_set("corner_roundness", buf);
+
+    snprintf(buf, sizeof(buf), "%u", (unsigned)cfg->panelAlpha);
+    cfg_value_set("panel_alpha", buf);
+    snprintf(buf, sizeof(buf), "%u", (unsigned)cfg->elementAlpha);
+    cfg_value_set("element_alpha", buf);
+    snprintf(buf, sizeof(buf), "%u", (unsigned)cfg->overlayAlpha);
+    cfg_value_set("overlay_alpha", buf);
+
+    cfg_value_set("gradients", cfg->gradients ? "true" : "false");
+    snprintf(buf, sizeof(buf), "%.2f", cfg->gradientTopBoost);
+    cfg_value_set("gradient_top_boost", buf);
+    snprintf(buf, sizeof(buf), "%.2f", cfg->gradientBotScale);
+    cfg_value_set("gradient_bottom_scale", buf);
+    cfg_value_set("show_borders", cfg->showBorders ? "true" : "false");
+
+    cfg_value_set("font_enabled", cfg->fontEnabled ? "true" : "false");
+    cfg_value_set("font_path", cfg->fontPath);
+    snprintf(buf, sizeof(buf), "%.2f", cfg->fontRasterBoostCJK);
+    cfg_value_set("font_cjk_raster_boost", buf);
+    cfg_value_set("font_bilinear", cfg->fontBilinear ? "true" : "false");
+    cfg_value_set("font_native_metrics", cfg->fontNativeMetrics ? "true" : "false");
+    cfg_value_set("font_fallback_kerning", cfg->fontFallbackKerning ? "true" : "false");
+
+    buf[0] = '\0';
+    for (u8 i = 0; i < cfg->fontSlotCount && i < DJUI_MODERN_FONT_SLOT_COUNT; i++) {
+        char piece[8];
+        snprintf(piece, sizeof(piece), "%s%u", (i == 0) ? "" : " ",
+                 (unsigned)cfg->fontSlots[i]);
+        strncat(buf, piece, sizeof(buf) - strlen(buf) - 1);
+    }
+    cfg_value_set("font_slots", buf);
+
+    cfg_value_set("emoji", cfg->emojiModern ? "modern" : "vanilla");
+    snprintf(buf, sizeof(buf), "%.2f", cfg->textScale);
+    cfg_value_set("text_scale", buf);
+    cfg_value_set("font_player_list", cfg->fontPlayerList ? "true" : "false");
+    cfg_value_set("font_mod_description", cfg->fontModDescription ? "true" : "false");
+    cfg_value_set("show_stats", cfg->showStats ? "true" : "false");
+}
+
+bool djui_modern_config_save(const struct DjuiModernConfig* cfg, const char** error) {
+    if (error != NULL) { *error = NULL; }
+    if (cfg == NULL) {
+        if (error != NULL) { *error = "配置数据为空"; }
+        return false;
+    }
+    const char* path = config_path();
+    if (path == NULL) {
+        if (error != NULL) { *error = "无法解析配置文件路径"; }
+        return false;
+    }
+
+    cfg_values_from_struct(cfg);
+
+    static char merged[CFG_TEXT_MAX];
+    if (!cfg_render(merged, sizeof(merged))) {
+        if (error != NULL) { *error = "配置内容超出缓冲区上限"; }
+        return false;
+    }
+    if (!config_write_text(path, merged)) {
+        if (error != NULL) { *error = "配置文件写入失败"; }
+        return false;
+    }
+    LOG_INFO("djui_modern: config saved to %s", path);
+    return true;
 }

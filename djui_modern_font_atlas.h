@@ -17,9 +17,6 @@ void djui_modern_font_atlas_frame_begin(void);
 void djui_modern_font_atlas_pass_begin(void);
 bool djui_modern_font_atlas_ready(void);
 const char* djui_modern_font_atlas_name(void);
-
-/* 返回内嵌中文字体数据，供 ImGui 构建字体图谱；未加载时返回 NULL。 */
-const unsigned char* djui_modern_font_atlas_cjk_data(unsigned int* size);
 void djui_modern_font_atlas_stats(u32* atlasPixels, u32* glyphCount, u32* uploads);
 
 // 返回 em 相对宽度；字偶间距通过前瞻下一个字符计算。

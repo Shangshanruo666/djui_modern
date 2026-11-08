@@ -9,7 +9,7 @@
 Lua 接口仍由原版代码负责。
 
 所有新增实现都位于 `src/pc/djui_modern/`。对原版源码的修改限制在生命周期调用、
-弱定义和已登记钩子的调用点。
+弱定义、已登记钩子的调用点，以及 `DjuiBase.type` 控件类别元数据。
 
 ## 模块划分
 
@@ -19,7 +19,10 @@ Lua 接口仍由原版代码负责。
 | `djui_modern_rrect.c` | 圆角轮廓、遮罩、顶点池和 display list |
 | `djui_modern_font.c` | `DjuiFont` 适配器和字体槽安装 |
 | `djui_modern_font_atlas.c` | TTF/OTF 光栅化、字形纹理、Emoji 和国旗 |
-| `djui_modern_config.c` | 配置读取、模板重建和取值覆盖 |
+| `djui_modern_config.c` | 配置读取、设置面板读写和默认文件维护 |
+| `djui_modern_settings.c` | 基于原版 DJUI 控件的设置面板 |
+| `djui_modern_lang.c` | 模块语言表查询 |
+| `lang/` | 各语言界面文本和配置项说明 |
 | `djui_modern_gbi.h` | 模块私有的 display list 宏 |
 | `*_data.h` | 生成的字体、Emoji 和国旗数据 |
 | `font/` | 内嵌字体和授权信息 |
@@ -40,6 +43,21 @@ Lua 接口仍由原版代码负责。
 6. `djui_render()` 结束绘制时调用 `djui_modern_post_render()`，执行可选的
    display list 诊断。
 7. `djui_shutdown()` 调用 `djui_modern_shutdown()`，还原字体指针并释放资源。
+
+## 控件类别
+
+原版构造函数创建复合控件时写入 `DjuiBase.type`。按钮、复选框、滑条、输入框、
+选择框、进度条和面板分别使用独立类别，复合控件内部的表面、轨道和填充也各自
+记录类别。模块根据该字段选择圆角、边框和填充策略，不使用宽高、颜色或子节点
+结构推断控件类型。
+
+| 类别组 | 示例 | 模块行为 |
+| --- | --- | --- |
+| 面板 | `PANEL` | 面板圆角和投影 |
+| 交互控件 | `BUTTON_SURFACE`、`INPUTBOX`、`SELECTIONBOX_BOX` | 控件圆角和主题色 |
+| 滑条 | `SLIDER_TRACK`、`SLIDER_FILL` | 轨道统一绘制内沿填充和边框 |
+| 复选框 | `CHECKBOX_FRAME`、`CHECKBOX_VALUE` | 交回原版绘制 |
+| 通用矩形 | `RECT`、`GENERIC` | 按普通控件绘制 |
 
 ## 上游接口
 
@@ -66,7 +84,9 @@ Lua 接口仍由原版代码负责。
 | 字体适配 | `djui_modern_font_*` | 安装、查询和还原字体槽 |
 | 字体后端 | `djui_modern_font_atlas_*` | 光栅化、测量、纹理和字形输出 |
 | 圆角矩形 | `djui_modern_rrect_*` | 几何、遮罩、边框和 display list |
-| 配置 | `djui_modern_config_load` | 读取配置并应用默认值 |
+| 配置 | `djui_modern_config_load` / `djui_modern_config_read` / `djui_modern_config_save` | 启动配置、面板读取和保存 |
+| 设置面板 | `djui_modern_settings_create` | 生成控件并写入配置文件 |
+| 语言 | `djui_modern_lang_get` | 按当前游戏语言查询模块文本 |
 
 只有字体适配层可以修改 `gDjuiFonts`。主模块不直接访问字形纹理或字体表。
 
@@ -87,6 +107,11 @@ DjuiFont 回调
 djui_modern.cfg
   -> djui_modern_config
   -> 渲染、字体和圆角矩形模块
+
+选项菜单
+  -> djui_modern_settings
+  -> 读取 djui_modern.cfg 与语言表
+  -> 保存后提示重启
 ```
 
 `pre_render` 从当前 `DjuiTheme` 读取基础颜色。矩形最终颜色和不透明度仍来自
@@ -99,27 +124,28 @@ djui_modern.cfg
 | 文件 | 用途 |
 | --- | --- |
 | `Makefile` | 将 `src/pc/djui_modern` 加入 `SRC_DIRS` |
-| `Android.mk` | 仅 Android：将 `src/pc/djui_modern` 加入 `SRC_DIRS` |
 | `src/pc/djui/djui.c` | 生命周期调用 |
-| `src/pc/djui/djui_rect.c` | 矩形接管钩子 |
+| `src/pc/djui/djui_rect.c` | 矩形接管钩子和矩形类别 |
 | `src/pc/djui/djui_gfx.c` | 字号和文字裁剪钩子 |
 | `src/pc/djui/djui_hud_utils.c` | N64 屏幕空间字号上报 |
 | `src/pc/djui/djui_unicode.c` | Unicode 字符接受钩子 |
 | `src/pc/djui/djui_text.c` | 文字节点创建钩子 |
-| `src/pc/djui/djui_panel_host_mods.c` | mod 描述面板身份 |
+| `src/pc/djui/djui_base.h` | `DjuiBaseType` 枚举和 `DjuiBase.type` 字段 |
+| `src/pc/djui/djui_base.c` | 新节点默认使用通用类别 |
+| `src/pc/djui/djui_button.c` 等控件构造函数 | 写入复合控件及内部矩形类别 |
+| `src/pc/djui/djui_panel_menu_options.c` | 设置面板入口 |
 | `src/pc/gfx/gfx_dxgi.cpp` | Windows UTF-16 代理对输入 |
+| `src/pc/gfx/gfx_pc.c` | 大尺寸 RGBA32 纹理上传 |
 
 桌面和 Android 只在原版文件内容不同时生成独立的 `.android.patch` 变体。
 补丁由 `tools/make_patches.py` 生成，不建议手工修改。
-
-Android 的 ndk-build 读取 `Android.mk` 的 `SRC_DIRS`，与根目录 `Makefile`
-相互独立，两处必须同步修改。
 
 ## 维护约束
 
 - 能放在模块内解决的行为，不增加新的上游修改。
 - 一个上游函数只保留一个钩子，不为同一操作增加并行入口。
-- 钩子原型写在调用它的 `.c` 文件中，避免影响整个 DJUI 头文件依赖图。
+- 钩子原型写在调用它的 `.c` 文件中；`djui_base.h` 不增加钩子声明。
 - `weak` 只用于原版文件中的空定义，不写在声明上。
+- 新复合控件必须由构造函数写入 `DjuiBase.type`，模块不得通过几何形状推断类别。
 - 运行时配置统一由 `djui_modern.cfg` 提供。
 - 修改上游钩子后重新生成补丁，并分别验证桌面和 Android。

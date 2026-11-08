@@ -20,3 +20,11 @@ diff --git a/src/pc/djui/djui_rect.c b/src/pc/djui/djui_rect.c
      struct DjuiBaseRect* clip = &base->clip;
  
      // translate position
+@@ -37,6 +45,7 @@ struct DjuiRect* djui_rect_create(struct DjuiBase* parent) {
+     struct DjuiBase* base = &rect->base;
+ 
+     djui_base_init(parent, base, djui_rect_render, djui_rect_destroy);
++    base->type = DJUI_BASE_TYPE_RECT;
+ 
+     return rect;
+ }

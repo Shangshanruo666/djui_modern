@@ -457,15 +457,13 @@ static void rrect_radius_for(enum DjuiModernRadius kind, f32 explicitRadius,
     switch (kind) {
         case DJUI_MODERN_RADIUS_PANEL:   r = gDjuiModernConfig.radiusPanel;   break;
         case DJUI_MODERN_RADIUS_ELEMENT: r = gDjuiModernConfig.radiusElement; break;
-        case DJUI_MODERN_RADIUS_PILL:    r = gDjuiModernConfig.radiusPill;    break;
+        case DJUI_MODERN_RADIUS_PILL:    r = h * 0.5f;                        break;
         case DJUI_MODERN_RADIUS_NONE:
         default:                         r = 0.0f;                            break;
     }
 
     if (explicitRadius >= 0.0f) {
         r = explicitRadius;
-    } else if (kind == DJUI_MODERN_RADIUS_PILL && gDjuiModernConfig.radiusPill < 0.0f) {
-        r = h * 0.5f;
     }
 
     // 半径不得超过短边一半（否则两端圆弧相切，矩形退化成胶囊）
@@ -495,19 +493,39 @@ static inline struct DjuiColor lerp_color(struct DjuiColor a, struct DjuiColor b
     return c;
 }
 
+static u16 rrect_uv_at(const f32* vals, const u16* uvs, s32 n, f32 value) {
+    if (value <= vals[0]) { return uvs[0]; }
+    if (value >= vals[n - 1]) { return uvs[n - 1]; }
+    for (s32 i = 1; i < n; i++) {
+        if (value > vals[i]) { continue; }
+        const f32 span = vals[i] - vals[i - 1];
+        if (span <= 0.001f) { return uvs[i]; }
+        const f32 t = (value - vals[i - 1]) / span;
+        const f32 uv = (f32)uvs[i - 1] + ((f32)uvs[i] - (f32)uvs[i - 1]) * t;
+        return (u16)(uv + 0.5f);
+    }
+    return uvs[n - 1];
+}
+
 /*
- * 把一条坐标轴上的断点收拢到 [lo, hi] 内。
- *
- * 填充的圆角几何按整体尺寸生成，绘制时再按 clip 截取。断点收拢到边界，
- * UV 同步钳制到对应边界值；clip 外的部分不会显示，因此不产生可见误差。
- *
- * 这里不做 UV 内插：九宫格里角区（r 像素比 C 纹素）与直边区（w-2r
- * 像素比 M-2C 纹素）的映射比例天然不同，内插出来是错的。
+ * 把一条坐标轴上的断点收拢到 [lo, hi] 内，并按原分段换算裁剪点的 UV。
+ * 裁剪点落在直边区时按比例取 UV，角区纹理不会被压缩到更短的宽度。
  */
 static void rrect_clamp_axis(f32* vals, u16* uvs, s32 n, f32 lo, f32 hi) {
+    f32 srcVals[6];
+    u16 srcUvs[6];
     for (s32 i = 0; i < n; i++) {
-        if (vals[i] < lo) { vals[i] = lo; if (uvs[i] < uvs[0]) { uvs[i] = uvs[0]; } }
-        if (vals[i] > hi) { vals[i] = hi; if (uvs[i] > uvs[n - 1]) { uvs[i] = uvs[n - 1]; } }
+        srcVals[i] = vals[i];
+        srcUvs[i] = uvs[i];
+    }
+    for (s32 i = 0; i < n; i++) {
+        if (vals[i] < lo) {
+            vals[i] = lo;
+            uvs[i] = rrect_uv_at(srcVals, srcUvs, n, lo);
+        } else if (vals[i] > hi) {
+            vals[i] = hi;
+            uvs[i] = rrect_uv_at(srcVals, srcUvs, n, hi);
+        }
     }
     // 断点必须单调不减，否则四边形会自交
     for (s32 i = 1; i < n; i++) {
@@ -516,61 +534,20 @@ static void rrect_clamp_axis(f32* vals, u16* uvs, s32 n, f32 lo, f32 hi) {
 }
 
 /*
- * 画一个圆角矩形（可选渐变），只保留落在 clip 内的部分。
+ * 按给定的断点与 UV 提交一个圆角矩形。
  *
- * 几何与圆角半径都按"comp 内缩 inset 之后"的尺寸生成，再把断点收拢进
- * clip。inset = 0 就是整块矩形；带边框时传边框宽度，让填充的角正好落在
- * 环带内沿上。传 explicitRadius = 0 时就是纯直角矩形，边框退化路径的
- * 四条直边就是这么画的。
+ * 断点由调用方决定：几何按整体尺寸生成，裁剪只移除不可见部分。
  */
-static void rrect_emit(struct DjuiBaseRect* clip, struct DjuiBaseRect* comp,
-                       enum DjuiModernRadius radiusKind, f32 explicitRadius,
-                       struct DjuiColor topColor, struct DjuiColor bottomColor,
-                       u8 alphaScale, f32 inset) {
-    if (sMaskTexture == NULL) { return; }
-
-    struct DjuiBaseRect rc = *comp;
-    if (inset > 0.0f) {
-        rc.x += inset;
-        rc.y += inset;
-        rc.width  -= inset * 2.0f;
-        rc.height -= inset * 2.0f;
-        if (rc.width <= 0.0f || rc.height <= 0.0f) { return; }
-    }
-
-    const f32 x1 = fmaxf(rc.x, clip->x);
-    const f32 y1 = fmaxf(rc.y, clip->y);
-    const f32 x2 = fminf(rc.x + rc.width,  clip->x + clip->width);
-    const f32 y2 = fminf(rc.y + rc.height, clip->y + clip->height);
+static void rrect_submit_shape(struct DjuiBaseRect* clip,
+                               const f32* xs, const f32* ys,
+                               const u16* us, const u16* vs,
+                               struct DjuiColor topColor,
+                               struct DjuiColor bottomColor) {
+    const f32 x1 = fmaxf(xs[0], clip->x);
+    const f32 y1 = fmaxf(ys[0], clip->y);
+    const f32 x2 = fminf(xs[5], clip->x + clip->width);
+    const f32 y2 = fminf(ys[3], clip->y + clip->height);
     if (x2 <= x1 || y2 <= y1) { return; }
-
-    topColor.a    = (u8)(((s32)topColor.a    * alphaScale) / 255);
-    bottomColor.a = (u8)(((s32)bottomColor.a * alphaScale) / 255);
-
-    // 半径按整体尺寸判定（不是裁剪后的尺寸）
-    f32 r = 0.0f, ry = 0.0f;
-    rrect_radius_for(radiusKind, explicitRadius, rc.width, rc.height, &r, &ry);
-
-    // 断点按整体几何生成（屏幕坐标）
-    f32 xs[6] = { rc.x,
-                  rc.x + r,           rc.x + r,
-                  rc.x + rc.width - r, rc.x + rc.width - r,
-                  rc.x + rc.width };
-    f32 ys[4] = { rc.y,
-                  rc.y + ry,
-                  rc.y + rc.height - ry,
-                  rc.y + rc.height };
-
-    // UV 断点是常量（见常量定义：外沿是纹素中心，角区 17.5 个纹素，直边区 28 个）
-    u16 us[6] = { RRECT_U_FIRST, RRECT_U_CORNER, RRECT_U_CORNER, RRECT_U_STRAIGHT, RRECT_U_STRAIGHT, RRECT_U_FAR };
-    u16 vs[4] = { RRECT_U_FIRST, RRECT_U_CORNER, RRECT_U_STRAIGHT, RRECT_U_FAR };
-
-    // 收拢到 clip
-    rrect_clamp_axis(xs, us, 6, x1, x2);
-    rrect_clamp_axis(ys, vs, 4, y1, y2);
-
-    // 收拢后可能整块都被压到边界，此时跳过
-    if (xs[5] <= xs[0] || ys[3] <= ys[0]) { return; }
 
     Vtx* vtx = vtx_alloc();
     if (vtx == NULL) { return; }
@@ -625,6 +602,69 @@ static void rrect_emit(struct DjuiBaseRect* clip, struct DjuiBaseRect* comp,
 }
 
 /*
+ * 画一个圆角矩形（可选渐变），只保留落在 clip 内的部分。
+ *
+ * borderWidth 非零时填充按边框内沿绘制：填充盒内缩边框宽度，半径取外轮廓
+ * 半径减边框宽度，圆心与边框内沿一致，因此填充与边框的圆角完全重合。
+ * 断点生成后按 clip 收拢，UV 按原分段换算，裁剪只移除不可见部分。
+ */
+static void rrect_emit(struct DjuiBaseRect* clip, struct DjuiBaseRect* comp,
+                       enum DjuiModernRadius radiusKind, f32 explicitRadius,
+                       struct DjuiColor topColor, struct DjuiColor bottomColor,
+                       u8 alphaScale, f32 borderWidth) {
+    if (sMaskTexture == NULL) { return; }
+
+    struct DjuiBaseRect rc = *comp;
+    f32 r = 0.0f, ry = 0.0f;
+    rrect_radius_for(radiusKind, explicitRadius, comp->width, comp->height, &r, &ry);
+
+    if (borderWidth > 0.0f) {
+        const f32 rox = fminf(r + borderWidth, comp->width * 0.5f);
+        const f32 roy = fminf(ry + borderWidth, comp->height * 0.5f);
+        r = rox - borderWidth;
+        ry = roy - borderWidth;
+
+        rc.x += borderWidth;
+        rc.y += borderWidth;
+        rc.width  -= borderWidth * 2.0f;
+        rc.height -= borderWidth * 2.0f;
+        if (rc.width <= 0.0f || rc.height <= 0.0f) { return; }
+    }
+
+    const f32 x1 = fmaxf(rc.x, clip->x);
+    const f32 y1 = fmaxf(rc.y, clip->y);
+    const f32 x2 = fminf(rc.x + rc.width,  clip->x + clip->width);
+    const f32 y2 = fminf(rc.y + rc.height, clip->y + clip->height);
+    if (x2 <= x1 || y2 <= y1) { return; }
+
+    topColor.a    = (u8)(((s32)topColor.a    * alphaScale) / 255);
+    bottomColor.a = (u8)(((s32)bottomColor.a * alphaScale) / 255);
+
+    // 断点按整体几何生成（屏幕坐标）
+    f32 xs[6] = { rc.x,
+                  rc.x + r,           rc.x + r,
+                  rc.x + rc.width - r, rc.x + rc.width - r,
+                  rc.x + rc.width };
+    f32 ys[4] = { rc.y,
+                  rc.y + ry,
+                  rc.y + rc.height - ry,
+                  rc.y + rc.height };
+
+    // UV 断点是常量（见常量定义：外沿是纹素中心，角区 17.5 个纹素，直边区 28 个）
+    u16 us[6] = { RRECT_U_FIRST, RRECT_U_CORNER, RRECT_U_CORNER, RRECT_U_STRAIGHT, RRECT_U_STRAIGHT, RRECT_U_FAR };
+    u16 vs[4] = { RRECT_U_FIRST, RRECT_U_CORNER, RRECT_U_STRAIGHT, RRECT_U_FAR };
+
+    // 收拢到 clip
+    rrect_clamp_axis(xs, us, 6, x1, x2);
+    rrect_clamp_axis(ys, vs, 4, y1, y2);
+
+    // 收拢后可能整块都被压到边界，此时跳过
+    if (xs[5] <= xs[0] || ys[3] <= ys[0]) { return; }
+
+    rrect_submit_shape(clip, xs, ys, us, vs, topColor, bottomColor);
+}
+
+/*
  * 边框的有效宽度：不超过短边一半（同上游 djui_base_render_border），
  * 也不超过外轮廓角部曲线的最小曲率半径（否则内轮廓在角心翻折、环带自交）。
  * 填充的内缩量必须用同一个值，否则填充边缘与环带内沿之间会留缝。
@@ -648,6 +688,225 @@ void djui_modern_rrect_draw(struct DjuiBaseRect* clip,
     rrect_emit(clip, comp, radiusKind, explicitRadius, topColor, bottomColor, alphaScale, 0.0f);
 }
 
+#define RRECT_SLIDER_SAMPLES        RRECT_BAND_SEG_CORNER
+#define RRECT_SLIDER_POINTS         (RRECT_SLIDER_SAMPLES + 3)
+#define RRECT_SLIDER_EDGE_FEATHER   0.75f
+
+/*
+ * 滑条填充的上下边界同时受左右圆角限制。四行九宫格网格无法表达这种
+ * 随横坐标变化的边界，因此逐列生成上下顶点。
+ */
+static f32 rrect_slider_top_y(f32 x, f32 left, f32 top, f32 radius) {
+    if (radius <= 0.001f || x <= left) { return top + radius; }
+    if (x >= left + radius) { return top; }
+
+    f32 lo = 0.0f;
+    f32 hi = (f32)M_PI * 0.5f;
+    for (s32 i = 0; i < 10; i++) {
+        const f32 phi = (lo + hi) * 0.5f;
+        const f32 rho = rrect_corner_rho(phi);
+        const f32 px = left + radius - rho * radius * cosf(phi);
+        if (px < x) {
+            lo = phi;
+        } else {
+            hi = phi;
+        }
+    }
+
+    const f32 phi = (lo + hi) * 0.5f;
+    const f32 rho = rrect_corner_rho(phi);
+    return top + radius - rho * radius * sinf(phi);
+}
+
+static struct DjuiColor rrect_slider_color_at(struct DjuiColor topColor,
+                                              struct DjuiColor bottomColor,
+                                              f32 top, f32 bottom, f32 y) {
+    const f32 span = fmaxf(bottom - top, 1.0f);
+    const f32 t = fminf(fmaxf((bottom - y) / span, 0.0f), 1.0f);
+    return lerp_color(bottomColor, topColor, t);
+}
+
+static void rrect_emit_slider_fill(struct DjuiBaseRect* clip,
+                                   struct DjuiBaseRect* inner,
+                                   enum DjuiModernRadius radiusKind,
+                                   f32 explicitRadius,
+                                   f32 fillFraction,
+                                   struct DjuiColor topColor,
+                                   struct DjuiColor bottomColor,
+                                   u8 alphaScale) {
+    fillFraction = fminf(fmaxf(fillFraction, 0.0f), 1.0f);
+    if (fillFraction <= 0.0f) { return; }
+
+    const struct DjuiBaseRect rc = *inner;
+    f32 right = rc.x + rc.width * fillFraction;
+    if (right <= rc.x || rc.height <= 0.0f) { return; }
+
+    f32 radius = 0.0f, radiusY = 0.0f;
+    rrect_radius_for(radiusKind, explicitRadius, rc.width, rc.height, &radius, &radiusY);
+    radius = fminf(radius, rc.width);
+    radiusY = fminf(radiusY, rc.height * 0.5f);
+    if (radiusY < radius) { radius = radiusY; }
+
+    if (fillFraction >= 0.999999f) {
+        struct DjuiBaseRect fullRect = rc;
+        rrect_emit(clip, &fullRect, radiusKind, explicitRadius, topColor, bottomColor, alphaScale, 0.0f);
+        return;
+    }
+
+    const f32 cornerEnd = rc.x + radius;
+    const bool hasStraight = (right >= cornerEnd);
+    if (hasStraight) {
+        struct DjuiBaseRect straight = rc;
+        straight.x = cornerEnd;
+        straight.width = right - cornerEnd;
+        if (straight.width > 0.0f) {
+            rrect_emit(clip, &straight, DJUI_MODERN_RADIUS_NONE, 0.0f,
+                       topColor, bottomColor, alphaScale, 0.0f);
+        }
+        right = cornerEnd;
+    }
+
+    const f32 feather = hasStraight
+        ? 0.0f
+        : fminf(RRECT_SLIDER_EDGE_FEATHER, right - rc.x);
+    const f32 solidRight = fmaxf(rc.x, right - feather);
+    f32 xs[RRECT_SLIDER_POINTS];
+    f32 topYs[RRECT_SLIDER_POINTS];
+    s32 count = 0;
+    xs[count++] = rc.x;
+    topYs[0] = rc.y + radius;
+
+    if (radius > 0.001f) {
+        for (s32 i = 1; i <= RRECT_SLIDER_SAMPLES; i++) {
+            const f32 phi = ((f32)M_PI * 0.5f) * (f32)i / (f32)RRECT_SLIDER_SAMPLES;
+            const f32 rho = rrect_corner_rho(phi);
+            const f32 x = rc.x + radius - rho * radius * cosf(phi);
+            const f32 y = rc.y + radius - rho * radius * sinf(phi);
+            if (x >= solidRight - 0.001f) { break; }
+            xs[count++] = x;
+            topYs[count - 1] = y;
+        }
+    }
+    if (count < RRECT_SLIDER_POINTS && solidRight > xs[count - 1] + 0.001f) {
+        xs[count++] = solidRight;
+        topYs[count - 1] = rrect_slider_top_y(solidRight, rc.x, rc.y, radius);
+    }
+    if (count < RRECT_SLIDER_POINTS && right > xs[count - 1] + 0.001f) {
+        xs[count++] = right;
+        topYs[count - 1] = rrect_slider_top_y(right, rc.x, rc.y, radius);
+    }
+    if (count < 2) { return; }
+
+    Vtx* vtx = vtx_alloc_count(4 * count);
+    if (vtx == NULL) { return; }
+
+    const f32 x1 = fmaxf(rc.x, clip->x);
+    const f32 y1 = fmaxf(rc.y, clip->y);
+    const f32 x2 = fminf(right, clip->x + clip->width);
+    const f32 y2 = fminf(rc.y + rc.height, clip->y + clip->height);
+    if (x2 <= x1 || y2 <= y1) { return; }
+
+    const f32 w = x2 - x1;
+    const f32 h = y2 - y1;
+    for (s32 i = 0; i < count; i++) {
+        const f32 x = fminf(fmaxf(xs[i], x1), x2);
+        const f32 mirroredX = rc.x + (rc.x + rc.width - xs[i]);
+        const f32 rightTop = rrect_slider_top_y(mirroredX, rc.x, rc.y, radius);
+        const f32 yTop = fmaxf(topYs[i], rightTop);
+        const f32 yBottom = rc.y + rc.height - (yTop - rc.y);
+        const f32 ys[4] = { yTop,
+                            fminf(yTop + RRECT_SLIDER_EDGE_FEATHER, yBottom),
+                            fmaxf(yBottom - RRECT_SLIDER_EDGE_FEATHER, yTop),
+                            yBottom };
+        const bool rightFade = !hasStraight
+            && (i == count - 1)
+            && (xs[i] >= right - 0.001f);
+
+        for (s32 row = 0; row < 4; row++) {
+            Vtx* v = &vtx[row * count + i];
+            memset(v, 0, sizeof(Vtx));
+            struct DjuiColor color = rrect_slider_color_at(
+                topColor, bottomColor, rc.y, rc.y + rc.height, ys[row]);
+            color.a = (u8)(((s32)color.a * alphaScale) / 255);
+            if (rightFade) { color.a = 0; }
+
+            v->v.ob[0] = (x - x1) / w;
+            v->v.ob[1] = (y1 - fminf(fmaxf(ys[row], y1), y2)) / h;
+            v->v.cn[0] = color.r;
+            v->v.cn[1] = color.g;
+            v->v.cn[2] = color.b;
+            v->v.cn[3] = color.a;
+        }
+    }
+
+    f32 tx = x1, ty = y1;
+    djui_gfx_position_translate(&tx, &ty);
+    create_dl_translation_matrix(DJUI_MTX_PUSH, tx, ty, 0);
+
+    f32 tw = w, th = h;
+    djui_gfx_scale_translate(&tw, &th);
+    create_dl_scale_matrix(DJUI_MTX_NOPUSH, tw, th, 1.0f);
+
+    Gfx* dl = gDisplayListHead;
+    *dl++ = (Gfx) gsDPPipeSync();
+    *dl++ = (Gfx) gsSPClearGeometryMode(G_LIGHTING | G_CULL_BOTH);
+    *dl++ = (Gfx) gsDPSetCycleType(G_CYC_1CYCLE);
+    *dl++ = (Gfx) gsDPSetRenderMode(G_RM_XLU_SURF, G_RM_XLU_SURF2);
+    *dl++ = (Gfx) gsSPVertexNonGlobal(VIRTUAL_TO_PHYSICAL(vtx), 4 * count, 0);
+    *dl++ = (Gfx) gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF);
+    *dl++ = (Gfx) gsDPSetCombineMode(G_CC_SHADE, G_CC_SHADE);
+    for (s32 band = 0; band < 3; band++) {
+        for (s32 i = 0; i + 1 < count; i++) {
+            const s32 a = band * count + i;
+            const s32 b = a + 1;
+            const s32 c = (band + 1) * count + i + 1;
+            const s32 d = (band + 1) * count + i;
+            *dl++ = (Gfx) gsSP2TrianglesDjui(a, b, c, 0, a, c, d, 0);
+        }
+    }
+    *dl++ = (Gfx) gsSPSetGeometryMode(G_LIGHTING | G_CULL_BACK);
+    gDisplayListHead = dl;
+
+    gSPPopMatrix(gDisplayListHead++, G_MTX_MODELVIEW);
+}
+
+void djui_modern_rrect_draw_slider(struct DjuiBaseRect* clip,
+                                   struct DjuiBaseRect* track,
+                                   enum DjuiModernRadius radiusKind,
+                                   f32 explicitRadius,
+                                   f32 borderWidth,
+                                   f32 fillFraction,
+                                   struct DjuiColor borderColor,
+                                   struct DjuiColor topColor,
+                                   struct DjuiColor bottomColor,
+                                   u8 alphaScale) {
+    f32 ro = 0.0f, ry = 0.0f;
+    rrect_radius_for(radiusKind, explicitRadius, track->width, track->height, &ro, &ry);
+
+    f32 bw = (borderColor.a == 0) ? 0.0f : rrect_band_width(track, ro, ry, borderWidth);
+
+    struct DjuiBaseRect inner = *track;
+    if (bw > 0.001f) {
+        inner.x += bw;
+        inner.y += bw;
+        inner.width  -= bw * 2.0f;
+        inner.height -= bw * 2.0f;
+    }
+    if (inner.width <= 0.0f || inner.height <= 0.0f) { return; }
+
+    const f32 fillRadius = (bw > 0.001f) ? fminf(ro, inner.height * 0.5f) : ro;
+    rrect_emit_slider_fill(clip, &inner, DJUI_MODERN_RADIUS_NONE, fillRadius, fillFraction,
+                           topColor, bottomColor, alphaScale);
+
+    if (bw <= 0.001f) { return; }
+
+    struct DjuiColor bc = borderColor;
+    bc.a = (u8)(((s32)bc.a * alphaScale) / 255);
+    const struct DjuiColor none = { 0, 0, 0, 0 };
+    djui_modern_rrect_draw_framed(clip, track, radiusKind, explicitRadius, bw,
+                                  bc, none, none, alphaScale);
+}
+
 /*
  * 外轮廓半径 = 可见半径 + 边框宽度，按短边一半封顶。
  * 投影这类贴在控件外侧的图形必须用这个半径，否则角部比控件轮廓更锐，
@@ -661,6 +920,12 @@ f32 djui_modern_rrect_outer_radius(struct DjuiBaseRect* comp,
     const f32 bw = rrect_band_width(comp, ro, ry, borderWidth);
     const f32 cap = fminf(comp->width, comp->height) * 0.5f;
     return fminf(ro + bw, cap);
+}
+
+f32 djui_modern_rrect_radius(enum DjuiModernRadius radiusKind, f32 width, f32 height) {
+    f32 r = 0.0f, ry = 0.0f;
+    rrect_radius_for(radiusKind, -1.0f, width, height, &r, &ry);
+    return r;
 }
 
 /*
@@ -916,19 +1181,9 @@ void djui_modern_rrect_draw_framed(struct DjuiBaseRect* clip,
     // 否则填充边缘与环带内沿之间会留一条缝。
     f32 bw = (borderColor.a == 0) ? 0.0f : rrect_band_width(comp, ro, ry, borderWidth);
 
-    /*
-     * 填充按边框内沿绘制：内缩 bw，圆角半径保持 ro。
-     * 填充边缘具有一个纹素宽的抗锯齿过渡，因此内缩量减去约半个纹素；
-     * 否则填充边缘与环带内沿之间会出现亚像素细缝。
-     * 不额外绘制底色，避免边框颜色透过半透明填充。
-     */
-    f32 fillInset = 0.0f;
-    if (bw > 0.001f) {
-        f32 overlap = 0.5f * (ro + bw) / RRECT_CORNER_ARC;   // 约半个纹素
-        if (overlap > bw * 0.5f) { overlap = bw * 0.5f; }
-        fillInset = bw - overlap;
-    }
-    rrect_emit(clip, comp, radiusKind, explicitRadius, topColor, bottomColor, alphaScale, fillInset);
+    // 填充按边框内沿绘制：半径取外轮廓半径减边框宽度，圆心与环带内沿一致。
+    // 不额外绘制底色，避免边框颜色透过半透明填充。
+    rrect_emit(clip, comp, radiusKind, explicitRadius, topColor, bottomColor, alphaScale, bw);
 
     if (bw <= 0.001f) { return; }
 

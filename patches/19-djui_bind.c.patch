@@ -1,0 +1,19 @@
+diff --git a/src/pc/djui/djui_bind.c b/src/pc/djui/djui_bind.c
+--- a/src/pc/djui/djui_bind.c
++++ b/src/pc/djui/djui_bind.c
+@@ -51,6 +51,7 @@ struct DjuiBind* djui_bind_create(struct DjuiBase* parent, const char* message,
+     bind->configKey = configKey;
+ 
+     djui_base_init(parent, base, NULL, djui_bind_destroy);
++    base->type = DJUI_BASE_TYPE_BIND;
+     djui_base_set_size_type(&bind->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
+     djui_base_set_size(&bind->base, 1.0f, 28);
+     djui_base_set_color(&bind->base, 0, 0, 0, 0);
+@@ -65,6 +66,7 @@ struct DjuiBind* djui_bind_create(struct DjuiBase* parent, const char* message,
+     bind->text = text;
+ 
+     struct DjuiRect* rect = djui_rect_create(&bind->base);
++    rect->base.type = DJUI_BASE_TYPE_BIND_SURFACE;
+     djui_base_set_alignment(&rect->base, DJUI_HALIGN_RIGHT, DJUI_VALIGN_CENTER);
+     djui_base_set_size_type(&rect->base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);
+     djui_base_set_size(&rect->base, 0.7f, 1.0f);

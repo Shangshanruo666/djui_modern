@@ -1,0 +1,18 @@
+diff --git a/src/pc/djui/djui_button.c b/src/pc/djui/djui_button.c
+--- a/src/pc/djui/djui_button.c
++++ b/src/pc/djui/djui_button.c
+@@ -52,12 +52,14 @@ struct DjuiButton* djui_button_create(struct DjuiBase* parent, const char* messa
+     struct DjuiBase* base     = &button->base;
+ 
+     djui_base_init(parent, base, NULL, djui_button_destroy);
++    base->type = DJUI_BASE_TYPE_BUTTON;
+     djui_base_set_size(base, 200, configDjuiThemeCenter ? 50 : 64);
+     djui_base_set_border_width(base, 2);
+     djui_interactable_create(base, djui_button_update_style);
+     button->style = 0;
+ 
+     struct DjuiRect* rect = djui_rect_create(&button->base);
++    rect->base.type = DJUI_BASE_TYPE_BUTTON_SURFACE;
+     djui_base_set_size_type(&rect->base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);
+     djui_base_set_size(&rect->base, 1.0f, 1.0f);
+     button->rect = rect;

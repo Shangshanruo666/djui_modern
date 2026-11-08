@@ -102,17 +102,21 @@ On first launch, the module creates `djui_modern.cfg`:
 - Desktop: beside the sm64coopdx executable.
 - Android: in the game data directory beside `dynos/` and `mods/`.
 
-Restart the game after changing the file. On startup the file is compared with
-the built-in template: missing options are restored to their defaults, options
-outside the template are dropped, comments are reset to the template, and
-existing values are kept.
+The djui_modern settings panel in the options menu reads the saved configuration
+file. Restart the game after saving or restoring defaults. Missing options are
+appended on module upgrades; existing values are not rewritten.
+
+The right side of the settings panel describes the hovered option. Interface
+text is stored in `src/pc/djui_modern/lang/`, follows the game language, and
+includes Japanese even when the current upstream branch omits that file.
+Floating-point options stored in hundredths show their raw integer value on the
+slider, with the `1 = 0.01` conversion shown in the description panel.
 
 | Option | Default | Purpose |
 | --- | --- | --- |
 | `enabled` | `true` | Enable the module |
 | `radius_panel` | `12` | Panel radius in 320x240 DJUI coordinates |
 | `radius_element` | `8` | Regular control radius |
-| `radius_pill` | `-1` | Pill radius; a negative value uses half the height |
 | `corner_roundness` | `0.90` | Corner transition shape |
 | `panel_alpha` | `244` | Panel opacity |
 | `element_alpha` | `208` | Control opacity |

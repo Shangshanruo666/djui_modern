@@ -1,0 +1,11 @@
+diff --git a/src/pc/djui/djui_base.c b/src/pc/djui/djui_base.c
+--- a/src/pc/djui/djui_base.c
++++ b/src/pc/djui/djui_base.c
+@@ -441,6 +441,7 @@ void djui_base_destroy_one_child(struct DjuiBase* base) {
+ void djui_base_init(struct DjuiBase* parent, struct DjuiBase* base, bool (*render)(struct DjuiBase*), void (*destroy)(struct DjuiBase*)) {
+     memset(base, 0, sizeof(struct DjuiBase));
+     base->parent = parent;
++    base->type = DJUI_BASE_TYPE_GENERIC;
+     djui_base_set_visible(base, true);
+     djui_base_set_enabled(base, true);
+     djui_base_set_size(base, 64, 64);

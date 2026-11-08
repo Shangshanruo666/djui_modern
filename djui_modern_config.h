@@ -1,60 +1,58 @@
 #pragma once
 #include "pc/djui/djui.h"
 
-/* djui_modern 运行期配置。 */
+enum {
+    DJUI_MODERN_FONT_SLOT_COUNT = 7,
+    DJUI_MODERN_FONT_PATH_MAX = 260,
+};
 
 struct DjuiModernConfig {
-    // 总开关。
     bool  enabled;
 
-    // 形状。
-    f32   radiusPanel;      // 大面板圆角，320x240 坐标。
-    f32   radiusElement;    // 普通控件圆角。
-    f32   radiusPill;       // 胶囊圆角；< 0 时使用高度的一半。
-    // 0：羊角螺线过渡；1：正圆弧。
+    // 半径使用 320x240 DJUI 坐标。
+    f32   radiusPanel;
+    f32   radiusElement;
+    // 0 为羊角螺线过渡，1 为正圆弧。
     f32   cornerRoundness;
 
-    // 不透明度，0-255。
     u8    panelAlpha;
     u8    elementAlpha;
     u8    overlayAlpha;
 
-    // 渐变。
     bool  gradients;
     f32   gradientTopBoost;
     f32   gradientBotScale;
 
-    // 边框。
     bool  showBorders;
 
-    // 字体。
     bool  fontEnabled;
-    char  fontPath[260];
+    char  fontPath[DJUI_MODERN_FONT_PATH_MAX];
     f32   fontRasterBoostCJK;
     bool  fontBilinear;
-    // true：字体原生字距；false：对齐原版点阵字体宽度。
     bool  fontNativeMetrics;
-    // 字体缺少字偶间距数据时使用内置兜底。
     bool  fontFallbackKerning;
-    // 替换字体槽：
-    // 0=Normal（DJUI 常规字体） 1=Title（DJUI 标题字体） 2=HUD 3=Aliased（DJUI 锐利字体）
-    // 4=CustomHUD 5=RecolorHUD 6=Special
-    u8    fontSlots[8];
+    // 槽号：0=Normal 1=Title 2=HUD 3=Aliased 4=CustomHUD 5=RecolorHUD 6=Special
+    u8    fontSlots[DJUI_MODERN_FONT_SLOT_COUNT];
     u8    fontSlotCount;
-    // true：现代彩色 Emoji；false：原版 Emoji。
     bool  emojiModern;
-    // 字形光栅尺寸倍率；不改变排版尺寸。
     f32   textScale;
 
-    // 指定面板是否使用矢量字体。
     bool  fontPlayerList;
     bool  fontModDescription;
 
-    // 调试统计。
     bool  showStats;
 };
 
 extern struct DjuiModernConfig gDjuiModernConfig;
 
-/* 读取配置并填充默认值；重复调用只生效一次。 */
+/* 填充默认值并清零其余字段。 */
+void djui_modern_config_set_defaults(struct DjuiModernConfig* cfg);
+
+/* 启动时读取配置；重复调用只生效一次。 */
 void djui_modern_config_load(void);
+
+/* 从磁盘读取配置，不修改 gDjuiModernConfig。 */
+bool djui_modern_config_read(struct DjuiModernConfig* cfg, const char** error);
+
+/* 将给定配置写回磁盘。 */
+bool djui_modern_config_save(const struct DjuiModernConfig* cfg, const char** error);

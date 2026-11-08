@@ -59,29 +59,26 @@ sh src/pc/djui_modern/install.sh --no-submodule
 
 ## 上游补丁边界
 
-当前修改 10 个原版文件。桌面和 Android 的 `Makefile`、`djui.c` 内容不同，
-因此各自生成一份变体补丁。`Android.mk` 只存在于 Android 分支，单独生成
-`.android.patch`。
+桌面和 Android 内容不同的原版文件各自生成一份变体补丁。
 
 | 原版文件 | 修改 |
 | --- | --- |
 | `Makefile` | 将 `src/pc/djui_modern` 加入 `SRC_DIRS` |
-| `Android.mk` | 仅 Android：将 `src/pc/djui_modern` 加入 `SRC_DIRS` |
 | `src/pc/djui/djui.c` | 初始化和每帧生命周期调用 |
-| `src/pc/djui/djui_rect.c` | 在 `djui_rect_render()` 入口转发矩形绘制 |
+| `src/pc/djui/djui_rect.c` | 转发矩形绘制并标记矩形类别 |
 | `src/pc/djui/djui_gfx.c` | 上报文字字号和文字所属控件 |
 | `src/pc/djui/djui_hud_utils.c` | 上报 N64 屏幕空间中的 HUD 字号 |
 | `src/pc/djui/djui_unicode.c` | 放行模块能够渲染的 Emoji 和国旗 |
 | `src/pc/djui/djui_text.c` | 上报新建文字节点的字体策略 |
-| `src/pc/djui/djui_panel_host_mods.c` | 暴露 mod 描述面板指针 |
+| `src/pc/djui/djui_base.h` | 增加 `DjuiBaseType` 枚举和类别字段 |
+| `src/pc/djui/djui_base.c` | 初始化节点类别 |
+| `src/pc/djui/djui_button.c` 等控件构造函数 | 写入控件和内部矩形类别 |
+| `src/pc/djui/djui_panel_menu_options.c` | 提供设置面板入口 |
 | `src/pc/gfx/gfx_dxgi.cpp` | 合并 Windows UTF-16 代理对并转换 UTF-8 |
+| `src/pc/gfx/gfx_pc.c` | 支持大尺寸 RGBA32 纹理上传 |
 
-所有钩子声明都写在调用它的 `.c` 文件中，不修改上游头文件。这样可以避免
-`djui.h` 的依赖树在应用补丁后大范围重编。
-
-Android 侧由 ndk-build 读取 `Android.mk` 的 `SRC_DIRS`，与根目录 `Makefile`
-相互独立。两处必须同步加入 `src/pc/djui_modern`，否则模块源码不参与编译，
-链接期报 `djui_modern_*` 未定义。
+钩子声明仍写在调用它的 `.c` 文件中。控件类别属于原版数据结构，枚举和字段位于
+`djui_base.h`。
 
 ### 弱符号
 
@@ -115,7 +112,10 @@ src/pc/djui_modern/
 ├── djui_modern_rrect.c           圆角轮廓、遮罩、边框、顶点池
 ├── djui_modern_font.c            DjuiFont 适配器和槽位安装
 ├── djui_modern_font_atlas.c      TTF/OTF 光栅化和字形纹理
-├── djui_modern_config.c          配置读取和默认文件维护
+├── djui_modern_config.c          配置读取、保存和默认文件维护
+├── djui_modern_settings.c        原版 DJUI 设置面板
+├── djui_modern_lang.c            模块语言表查询
+├── lang/                         模块界面文本与配置项说明
 ├── djui_modern_gbi.h             模块私有 display list 宏
 ├── *_data.h                      生成的字体、Emoji 和国旗数据
 ├── font/                         内嵌字体和授权信息
@@ -140,6 +140,18 @@ if (djui_modern_rect_override(base)) {
 
 接管点位于原版设置颜色之后，因此模块读取到的是当前帧实际的颜色、透明度、
 渐变和交互状态。原版淡出效果不需要在模块中重新模拟。
+
+### 控件类别
+
+原版控件构造函数写入 `DjuiBase.type`。模块的矩形接管入口只检查该字段：
+
+- `SLIDER_TRACK` 查找 `SLIDER_FILL` 子节点并按比例统一绘制。
+- `CHECKBOX_FRAME` 和 `CHECKBOX_VALUE` 交回原版绘制。
+- `PANEL` 使用面板圆角和投影。
+- 按钮面、输入框、选择框和绑定按钮使用普通控件圆角。
+
+新增复合控件时，在构造函数中设置顶层控件和每个可见矩形子节点的类别。模块不
+通过宽高、颜色、父节点是否可交互或子节点数量推断控件类型。
 
 ### 主题处理
 
@@ -186,6 +198,15 @@ if (djui_modern_rect_override(base)) {
 - 边框沿轮廓向外生长，配置半径代表可见圆角半径。
 
 关闭 `show_borders` 时，模块不绘制边框。
+
+### 滑条
+
+滑条轨道从边框内沿开始绘制。填充比例取 `SLIDER_FILL` 的相对宽度，左端半径
+由外轮廓半径减去有效边框宽度得到，与边框内沿半径一致。常规值先绘制左圆角帽，
+再从圆角切点铺整高直段，右端保持垂直截止并由最后绘制的边框裁出右圆角；短
+填充直接按左圆角曲线裁剪。满值改用完整圆角内框，不保留右端截面。
+矢量字体开启时，设置面板的反色前景文字保持完整轨道宽度并居中，由填充区域
+负责裁剪，避免明暗数字错位或短填充裁出字形残片。
 
 ## 字体流程
 
@@ -282,15 +303,13 @@ UTF-8 发送给 DJUI。`djui_unicode_accepts()` 放行模块图集支持的 Emoj
 - 桌面端位于可执行文件同级。
 - Android 端位于游戏数据目录，与 `dynos/`、`mods/` 同级。
 
-文件不存在时生成完整默认配置。文件已存在时与模板比对：缺失的配置项补回默认值，
-模板之外的配置项移除，注释恢复为模板内容；已有取值保留。
+文件不存在时生成完整默认配置。文件已存在时只追加缺失键，不重写现有值。
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `enabled` | `true` | 模块总开关 |
 | `radius_panel` | `12` | 大面板圆角 |
 | `radius_element` | `8` | 普通控件圆角 |
-| `radius_pill` | `-1` | 胶囊圆角，负值表示高度的一半 |
 | `corner_roundness` | `0.90` | 圆角过渡形状，范围 0 到 1 |
 | `panel_alpha` | `244` | 面板不透明度 |
 | `element_alpha` | `208` | 控件不透明度 |
@@ -304,7 +323,7 @@ UTF-8 发送给 DJUI。`djui_unicode_accepts()` 放行模块图集支持的 Emoj
 | `font_cjk_raster_boost` | `1.0` | CJK 光栅尺寸倍率 |
 | `font_bilinear` | `true` | 字形是否使用双线性过滤 |
 | `font_native_metrics` | `true` | 使用字体原生西文宽度 |
-| `font_fallback_kerning` | `true` | 字体无字偶数据时使用内置表 |
+| `font_fallback_kerning` | `false` | 字体无字偶数据时使用内置表 |
 | `font_slots` | `0 3` | 替换的字体槽 |
 | `emoji` | `modern` | `modern` 或 `vanilla` |
 | `text_scale` | `1.0` | 全局字形光栅倍率，范围 0.5 到 2.0 |
@@ -415,6 +434,8 @@ sh install.sh --android --root /path/to/android-tree --no-submodule --dry-run
 - 点击、悬停、禁用和淡出颜色正常。
 - 聊天消息滚出可见区后被正确裁剪。
 - 普通控件的下伸字母和汉字不会被垂直裁掉。
+- 滑条填充位于边框内沿，左右圆角与边框内沿一致，右端为垂直截面。
+- 浮点配置滑条显示整数原值，说明面板显示对应的单位换算。
 - 输入框可以输入中文、Emoji 和国旗。
 - 崩溃界面仍使用原版等宽字体。
 - 桌面和 Android 补丁均无失败项。

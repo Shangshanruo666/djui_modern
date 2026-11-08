@@ -10,6 +10,21 @@
 05-djui_hud_utils.c.patch|src/pc/djui/djui_hud_utils.c|void djui_modern_note_font_size(f32 size);|any
 06-djui_unicode.c.patch|src/pc/djui/djui_unicode.c|// djui_modern 未参与编译时的空实现。|any
 07-djui_text.c.patch|src/pc/djui/djui_text.c|// djui_modern 未参与编译时的空实现。|any
-08-djui_panel_host_mods.c.patch|src/pc/djui/djui_panel_host_mods.c|// djui_modern 通过该指针识别描述面板的文字节点。|any
+08-djui_panel_menu_options.c.patch|src/pc/djui/djui_panel_menu_options.c|#if defined(__GNUC__)|any
 09-gfx_dxgi.cpp.patch|src/pc/gfx/gfx_dxgi.cpp|// 将 WM_CHAR 的 UTF-16 输入转换为 UTF-8，并合并代理对。|any
-10-Android.mk.android.patch|Android.mk|src/pc/djui_modern|android
+10-gfx_pc.c.patch|src/pc/gfx/gfx_pc.c|* RGBA32 纹理直接透传给后端，其余格式需要展开为 RGBA32。|any
+11-djui_base.h.patch|src/pc/djui/djui_base.h|* 控件的绘制类别。复合控件的子矩形使用独立类别，使渲染接管逻辑不依赖|any
+12-djui_base.c.patch|src/pc/djui/djui_base.c|base->type = DJUI_BASE_TYPE_GENERIC;|any
+13-djui_button.c.patch|src/pc/djui/djui_button.c|base->type = DJUI_BASE_TYPE_BUTTON;|any
+14-djui_checkbox.c.patch|src/pc/djui/djui_checkbox.c|base->type = DJUI_BASE_TYPE_CHECKBOX;|desktop
+14-djui_checkbox.c.android.patch|src/pc/djui/djui_checkbox.c|base->type = DJUI_BASE_TYPE_CHECKBOX;|android
+15-djui_slider.c.patch|src/pc/djui/djui_slider.c|base->type = DJUI_BASE_TYPE_SLIDER;|any
+16-djui_inputbox.c.patch|src/pc/djui/djui_inputbox.c|base->type = DJUI_BASE_TYPE_INPUTBOX;|any
+17-djui_selectionbox.c.patch|src/pc/djui/djui_selectionbox.c|base->type = DJUI_BASE_TYPE_SELECTIONBOX;|any
+18-djui_progress_bar.c.patch|src/pc/djui/djui_progress_bar.c|base->type = DJUI_BASE_TYPE_PROGRESS_BAR;|any
+19-djui_bind.c.patch|src/pc/djui/djui_bind.c|base->type = DJUI_BASE_TYPE_BIND;|any
+20-djui_chat_box.c.patch|src/pc/djui/djui_chat_box.c|chatContainer->base.type = DJUI_BASE_TYPE_CHAT_CONTAINER;|desktop
+20-djui_chat_box.c.android.patch|src/pc/djui/djui_chat_box.c|chatContainer->base.type = DJUI_BASE_TYPE_CHAT_CONTAINER;|android
+21-djui_three_panel.c.patch|src/pc/djui/djui_three_panel.c|base->type = DJUI_BASE_TYPE_PANEL;|any
+22-djui_flow_layout.c.patch|src/pc/djui/djui_flow_layout.c|base->type = DJUI_BASE_TYPE_FLOW_LAYOUT;|any
+23-Android.mk.android.patch|Android.mk|src/pc/djui_modern|android

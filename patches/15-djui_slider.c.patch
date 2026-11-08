@@ -1,0 +1,27 @@
+diff --git a/src/pc/djui/djui_slider.c b/src/pc/djui/djui_slider.c
+--- a/src/pc/djui/djui_slider.c
++++ b/src/pc/djui/djui_slider.c
+@@ -157,6 +157,7 @@ struct DjuiSlider* djui_slider_create(struct DjuiBase* parent, const char* messa
+     slider->updateRectValueColor = true;
+ 
+     djui_base_init(parent, base, djui_slider_render, djui_slider_destroy);
++    base->type = DJUI_BASE_TYPE_SLIDER;
+     djui_interactable_create(base, djui_slider_update_style);
+     djui_interactable_hook_cursor_down(base, djui_slider_on_cursor_down_begin, NULL, djui_slider_on_cursor_down_end);
+     djui_interactable_hook_focus(base, NULL, djui_slider_on_focus, NULL);
+@@ -170,6 +171,7 @@ struct DjuiSlider* djui_slider_create(struct DjuiBase* parent, const char* messa
+     slider->text = text;
+ 
+     struct DjuiRect* rect = djui_rect_create(&slider->base);
++    rect->base.type = DJUI_BASE_TYPE_SLIDER_TRACK;
+     djui_base_set_alignment(&rect->base, DJUI_HALIGN_RIGHT, DJUI_VALIGN_CENTER);
+     djui_base_set_size_type(&rect->base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);
+     djui_base_set_size(&rect->base, 0.45f, 1.0f);
+@@ -185,6 +187,7 @@ struct DjuiSlider* djui_slider_create(struct DjuiBase* parent, const char* messa
+     slider->textValueBackground = textValueBackground;
+ 
+     struct DjuiRect* rectValue = djui_rect_create(&rect->base);
++    rectValue->base.type = DJUI_BASE_TYPE_SLIDER_FILL;
+     djui_base_set_size_type(&rectValue->base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);
+     slider->rectValue = rectValue;
+ 

@@ -1,0 +1,11 @@
+diff --git a/src/pc/djui/djui_chat_box.c b/src/pc/djui/djui_chat_box.c
+--- a/src/pc/djui/djui_chat_box.c
++++ b/src/pc/djui/djui_chat_box.c
+@@ -537,6 +537,7 @@ struct DjuiChatBox* djui_chat_box_create(void) {
+     djui_base_set_padding(base, 0, 8, 8, 8);
+ 
+     struct DjuiRect* chatContainer = djui_rect_create(base);
++    chatContainer->base.type = DJUI_BASE_TYPE_CHAT_CONTAINER;
+     struct DjuiBase* ccBase = &chatContainer->base;
+     djui_base_set_size_type(ccBase, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
+     djui_base_set_size(ccBase, 1.0f, 0);

@@ -22,3 +22,4 @@ diff --git a/src/pc/djui/djui_text.c b/src/pc/djui/djui_text.c
 +
      return text;
  }
+\ No newline at end of file

@@ -5,7 +5,6 @@
 // 面板指针，用于判断文字节点所属面板。
 #include "pc/djui/djui_panel_playerlist.h"
 #include "pc/djui/djui_panel_modlist.h"
-#include "pc/djui/djui_panel_host_mods.h"
 #include "pc/djui/djui_theme.h"   // DjuiTheme / gDjuiThemes
 #include "pc/configfile.h"        // configDjuiTheme
 #include "djui_modern.h"
@@ -14,9 +13,6 @@
 #include "djui_modern_font.h"
 #include "pc/debuglog.h"
 #include "engine/math_util.h"
-
-/* 上游 mod 描述面板指针；未创建时为 NULL。 */
-extern struct DjuiThreePanel* gDjuiHostModsDescriptionPanel;
 
 static bool sEnabled = false;
 
@@ -88,28 +84,18 @@ static bool color_is_theme_element(struct DjuiColor c) {
     return false;
 }
 
-/*
- * 通过几何和结构识别复选框外框。
- * 中心块不可见时 comp 为 0，边框宽度也可能被接管，因此两者都不参与判定。
- */
-static bool base_is_checkbox_frame(struct DjuiBase* base) {
-    if (base == NULL || base->interactable != NULL) { return false; }
-    if (base->parent == NULL || base->parent->interactable == NULL) { return false; }
-    const f32 w = base->comp.width, h = base->comp.height;
-    if (w <= 1.0f || h <= 1.0f) { return false; }
-    if (w > 48.0f || h > 48.0f) { return false; }
-    if (fabsf(w - h) > 4.0f) { return false; }
-    // 有且仅有一个非交互子节点。
-    if (base->child == NULL || base->child->next != NULL) { return false; }
-    if (base->child->base->interactable != NULL) { return false; }
-    return true;
+static bool base_is_checkbox_part(struct DjuiBase* base) {
+    return base != NULL
+        && (base->type == DJUI_BASE_TYPE_CHECKBOX_FRAME
+            || base->type == DJUI_BASE_TYPE_CHECKBOX_VALUE);
 }
 
-/* 通过父节点识别复选框中心块。 */
-static bool base_is_checkbox_value(struct DjuiBase* base) {
-    if (base == NULL || base->interactable != NULL) { return false; }
-    if (base->parent == NULL) { return false; }
-    return base_is_checkbox_frame(base->parent);
+static struct DjuiBase* base_child_of_type(struct DjuiBase* base, enum DjuiBaseType type) {
+    if (base == NULL) { return NULL; }
+    for (struct DjuiBaseChild* child = base->child; child != NULL; child = child->next) {
+        if (child->base->type == type) { return child->base; }
+    }
+    return NULL;
 }
 
 /* 检查节点自身和所有祖先是否可见。 */
@@ -156,9 +142,7 @@ void djui_modern_note_text_created(struct DjuiText* text) {
         && base_inside(base, (gDjuiPlayerList != NULL) ? &gDjuiPlayerList->base : NULL)) {
         want = djui_modern_font_legacy(slot);
     } else if (!gDjuiModernConfig.fontModDescription
-               && (base_inside(base, (gDjuiModList != NULL) ? &gDjuiModList->base : NULL)
-                || base_inside(base, (gDjuiHostModsDescriptionPanel != NULL)
-                                        ? &gDjuiHostModsDescriptionPanel->base : NULL))) {
+               && base_inside(base, (gDjuiModList != NULL) ? &gDjuiModList->base : NULL)) {
         want = djui_modern_font_legacy(slot);
     }
 
@@ -325,7 +309,6 @@ static void apply_scheme(struct DjuiBase* base, s32 idx) {
                 bg.b = sThemedMap[idx].srcB;
             }
             base->color = bg;
-            base->gradient = gDjuiModernConfig.gradients;
         } break;
 
         case SCHEME_OVERLAY: {
@@ -366,7 +349,6 @@ static void apply_scheme(struct DjuiBase* base, s32 idx) {
             bg.b = sThemedMap[idx].srcB;
             bg.a = (u8)(((s32)sThemedMap[idx].srcAlpha * gDjuiModernConfig.elementAlpha) / 255);
             base->color = bg;
-            base->gradient = false;
         } break;
 
         case SCHEME_PANEL_ALPHA: {
@@ -404,7 +386,7 @@ static void apply_theme(struct DjuiBase* base, bool fillContainer) {
     }
 
     // 复选框保持原版颜色；首帧误登记时恢复保存的原色。
-    if (base_is_checkbox_frame(base) || base_is_checkbox_value(base)) {
+    if (base_is_checkbox_part(base)) {
         const s32 idx = themed_index_of(base);
         if (idx >= 0 && sThemedMap[idx].scheme != SCHEME_NONE) {
             base->color.r = sThemedMap[idx].srcR;
@@ -418,10 +400,16 @@ static void apply_theme(struct DjuiBase* base, bool fillContainer) {
         return;
     }
 
-    // 查找交互宿主；按钮的交互通常位于父节点。
-    struct DjuiBase* host = (base->interactable != NULL) ? base
-                          : (base->parent != NULL && base->parent->interactable != NULL) ? base->parent
-                          : NULL;
+    const bool isControlSurface = base->type == DJUI_BASE_TYPE_BUTTON_SURFACE
+                               || base->type == DJUI_BASE_TYPE_SLIDER_TRACK
+                               || base->type == DJUI_BASE_TYPE_SELECTIONBOX_BOX
+                               || base->type == DJUI_BASE_TYPE_BIND_SURFACE;
+    struct DjuiBase* host = NULL;
+    if (base->interactable != NULL) {
+        host = base;
+    } else if (isControlSurface && base->parent != NULL && base->parent->interactable != NULL) {
+        host = base->parent;
+    }
 
     // 已登记节点按记录方案更新。
     if (host != NULL) {
@@ -488,6 +476,7 @@ static bool sDiagLogged = false;
 static void modern_adopt(struct DjuiBase* base) {
     sDiagScanned++;
     if (base->render == djui_rect_render) { sDiagAdopted++; }
+
 }
 
 
@@ -645,7 +634,7 @@ static void modern_theme_and_adopt(struct DjuiBase* base, u32 depth) {
     // 接管边框几何，颜色仍由原版维护。
     if (base->interactable != NULL) {
         host_border_takeover(base);
-    } else if (base_is_checkbox_frame(base)) {
+    } else if (base->type == DJUI_BASE_TYPE_CHECKBOX_FRAME) {
         // 复选框保持原版方框边框。
         const f32 w = frame_border_width(base);
         if (w > 0.0f && base->borderWidth.value <= 0.001f) {
@@ -702,20 +691,26 @@ static void djui_modern_theme_pass(void) {
  * true：已由本模块绘制；false：交回原版。
  */
 
-static enum DjuiModernRadius radius_for(struct DjuiBase* base, struct DjuiBaseRect* draw) {
-    // 交互状态可能位于父节点。
-    const bool isElement = (base->interactable != NULL)
-                        || (base->parent != NULL && base->parent->interactable != NULL);
-    if (isElement) {
-        // 较矮的交互元素使用胶囊圆角。
-        if (draw->height <= 22.0f) { return DJUI_MODERN_RADIUS_PILL; }
-        return DJUI_MODERN_RADIUS_ELEMENT;
-    }
+static enum DjuiModernRadius radius_for(struct DjuiBase* base) {
+    return (base->type == DJUI_BASE_TYPE_PANEL)
+        ? DJUI_MODERN_RADIUS_PANEL
+        : DJUI_MODERN_RADIUS_ELEMENT;
+}
 
-    // 大面积使用面板圆角。
-    if (draw->width >= 96.0f && draw->height >= 56.0f) { return DJUI_MODERN_RADIUS_PANEL; }
+static void gradient_colors(struct DjuiBase* base,
+                            struct DjuiColor* top, struct DjuiColor* bottom) {
+    *top = base->color;
+    *bottom = base->color;
+    if (!base->gradient) { return; }
 
-    return DJUI_MODERN_RADIUS_ELEMENT;
+    const f32 topBoost = gDjuiModernConfig.gradientTopBoost;
+    const f32 botScale = gDjuiModernConfig.gradientBotScale;
+    top->r = (u8)clamp((s32)(top->r * topBoost), 0, 255);
+    top->g = (u8)clamp((s32)(top->g * topBoost), 0, 255);
+    top->b = (u8)clamp((s32)(top->b * topBoost), 0, 255);
+    bottom->r = (u8)clamp((s32)(bottom->r * botScale), 0, 255);
+    bottom->g = (u8)clamp((s32)(bottom->g * botScale), 0, 255);
+    bottom->b = (u8)clamp((s32)(bottom->b * botScale), 0, 255);
 }
 
 /* 大矩形诊断输出。 */
@@ -774,7 +769,10 @@ bool djui_modern_rect_override(struct DjuiBase* base) {
     if (!subtree_visible(base)) { return true; }
 
     // 复选框完全交由原版绘制。
-    if (base_is_checkbox_frame(base) || base_is_checkbox_value(base)) { return false; }
+    if (base_is_checkbox_part(base)) { return false; }
+
+    // 滑条填充由轨道统一绘制。
+    if (base->type == DJUI_BASE_TYPE_SLIDER_FILL) { return true; }
 
     struct DjuiBaseRect* clip = &base->clip;
     struct DjuiBaseRect* comp = &base->comp;
@@ -786,15 +784,33 @@ bool djui_modern_rect_override(struct DjuiBase* base) {
     const f32 borderWidth = base->borderWidth.value;
     const bool hasFill   = (base->color.a > 0);
 
-    // 原版矩形填充直接使用 clip。
     struct DjuiBaseRect draw = *clip;
     if (draw.width <= 0.0f || draw.height <= 0.0f) { return true; }
 
-    // 半径按实际绘制矩形判定（而非 comp），避免被父级裁掉后仍按原尺寸算圆角。
-    const enum DjuiModernRadius radius = radius_for(base, &draw);
+    const enum DjuiModernRadius radius = radius_for(base);
 
-    // 使用 radius_for 计算的半径。
     const f32 explicitRadius = -1.0f;
+
+    if (base->type == DJUI_BASE_TYPE_SLIDER_TRACK) {
+        struct DjuiBase* fill = base_child_of_type(base, DJUI_BASE_TYPE_SLIDER_FILL);
+        if (fill == NULL) { return true; }
+
+        f32 sliderBorderW = -1.0f;
+        if (gDjuiModernConfig.showBorders) {
+            sliderBorderW = frame_border_width(base);
+            if (sliderBorderW < 0.0f) { sliderBorderW = base->borderWidth.value; }
+        }
+        if (base->borderColor.a == 0) { sliderBorderW = 0.0f; }
+
+        struct DjuiColor fillTop;
+        struct DjuiColor fillBottom;
+        gradient_colors(fill, &fillTop, &fillBottom);
+        const f32 fillFraction = clamp(fill->width.value, 0.0f, 1.0f);
+        djui_modern_rrect_draw_slider(clip, &draw, radius, explicitRadius,
+                                      fmaxf(sliderBorderW, 0.0f), fillFraction,
+                                      base->borderColor, fillTop, fillBottom, 255);
+        return true;
+    }
 
     // 全透明控件仍可能需要绘制边框。
     if (!hasFill) {
@@ -822,19 +838,9 @@ bool djui_modern_rect_override(struct DjuiBase* base) {
                  (int)radius);
     }
 
-    struct DjuiColor top = base->color;
-    struct DjuiColor bottom = base->color;
-
-    if (base->gradient) {
-        const f32 topBoost = gDjuiModernConfig.gradientTopBoost;
-        const f32 botScale = gDjuiModernConfig.gradientBotScale;
-        top.r    = (u8)clamp((s32)(top.r * topBoost), 0, 255);
-        top.g    = (u8)clamp((s32)(top.g * topBoost), 0, 255);
-        top.b    = (u8)clamp((s32)(top.b * topBoost), 0, 255);
-        bottom.r = (u8)clamp((s32)(bottom.r * botScale), 0, 255);
-        bottom.g = (u8)clamp((s32)(bottom.g * botScale), 0, 255);
-        bottom.b = (u8)clamp((s32)(bottom.b * botScale), 0, 255);
-    }
+    struct DjuiColor top;
+    struct DjuiColor bottom;
+    gradient_colors(base, &top, &bottom);
 
     // 获取边框宽度和颜色。
     f32 hostBorderW = frame_border_width(base);
@@ -847,8 +853,7 @@ bool djui_modern_rect_override(struct DjuiBase* base) {
     }
     const bool hasBorder = gDjuiModernConfig.showBorders && hostBorderW > 0.0f && borderCol.a > 0;
 
-    // 大面积面板添加轻量投影。
-    if (radius == DJUI_MODERN_RADIUS_PANEL && draw.height >= 40.0f) {
+    if (radius == DJUI_MODERN_RADIUS_PANEL) {
         struct DjuiBaseRect shadow = draw;
         shadow.y     += 2.0f;
         shadow.x     -= 1.0f;

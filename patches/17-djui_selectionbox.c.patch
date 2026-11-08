@@ -1,0 +1,19 @@
+diff --git a/src/pc/djui/djui_selectionbox.c b/src/pc/djui/djui_selectionbox.c
+--- a/src/pc/djui/djui_selectionbox.c
++++ b/src/pc/djui/djui_selectionbox.c
+@@ -117,6 +117,7 @@ struct DjuiSelectionbox* djui_selectionbox_create(struct DjuiBase* parent, const
+     selectionbox->choiceCount = choiceCount;
+ 
+     djui_base_init(parent, base, NULL, djui_selectionbox_destroy);
++    base->type = DJUI_BASE_TYPE_SELECTIONBOX;
+     djui_interactable_create(base, djui_selectionbox_update_style);
+     djui_interactable_hook_cursor_down(base, djui_selectionbox_on_cursor_down_begin, NULL, NULL);
+ 
+@@ -129,6 +130,7 @@ struct DjuiSelectionbox* djui_selectionbox_create(struct DjuiBase* parent, const
+     selectionbox->text = text;
+ 
+     struct DjuiRect* rect = djui_rect_create(&selectionbox->base);
++    rect->base.type = DJUI_BASE_TYPE_SELECTIONBOX_BOX;
+     djui_base_set_alignment(&rect->base, DJUI_HALIGN_RIGHT, DJUI_VALIGN_CENTER);
+     djui_base_set_size_type(&rect->base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);
+     djui_base_set_size(&rect->base, 0.45f, 1.0f);

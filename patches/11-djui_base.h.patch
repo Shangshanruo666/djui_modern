@@ -1,0 +1,42 @@
+diff --git a/src/pc/djui/djui_base.h b/src/pc/djui/djui_base.h
+--- a/src/pc/djui/djui_base.h
++++ b/src/pc/djui/djui_base.h
+@@ -20,9 +20,38 @@ struct DjuiBasePadding {
+     struct DjuiScreenValue left;
+ };
+ 
++/*
++ * 控件的绘制类别。复合控件的子矩形使用独立类别，使渲染接管逻辑不依赖
++ * 节点位置、宽高或子节点结构来推断控件类型。
++ */
++enum DjuiBaseType {
++    DJUI_BASE_TYPE_GENERIC = 0,
++    DJUI_BASE_TYPE_RECT,
++    DJUI_BASE_TYPE_PANEL,
++    DJUI_BASE_TYPE_FLOW_LAYOUT,
++    DJUI_BASE_TYPE_BUTTON,
++    DJUI_BASE_TYPE_BUTTON_SURFACE,
++    DJUI_BASE_TYPE_CHECKBOX,
++    DJUI_BASE_TYPE_CHECKBOX_FRAME,
++    DJUI_BASE_TYPE_CHECKBOX_VALUE,
++    DJUI_BASE_TYPE_SLIDER,
++    DJUI_BASE_TYPE_SLIDER_TRACK,
++    DJUI_BASE_TYPE_SLIDER_FILL,
++    DJUI_BASE_TYPE_INPUTBOX,
++    DJUI_BASE_TYPE_SELECTIONBOX,
++    DJUI_BASE_TYPE_SELECTIONBOX_BOX,
++    DJUI_BASE_TYPE_PROGRESS_BAR,
++    DJUI_BASE_TYPE_PROGRESS_TRACK,
++    DJUI_BASE_TYPE_PROGRESS_FILL,
++    DJUI_BASE_TYPE_BIND,
++    DJUI_BASE_TYPE_BIND_SURFACE,
++    DJUI_BASE_TYPE_CHAT_CONTAINER,
++};
++
+ struct DjuiBase {
+     struct DjuiBase* parent;
+     struct DjuiBaseChild* child;
++    enum DjuiBaseType type;
+     bool visible;
+     bool enabled;
+     struct DjuiScreenValue x;

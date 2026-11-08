@@ -1,0 +1,25 @@
+diff --git a/src/pc/djui/djui_progress_bar.c b/src/pc/djui/djui_progress_bar.c
+--- a/src/pc/djui/djui_progress_bar.c
++++ b/src/pc/djui/djui_progress_bar.c
+@@ -47,11 +47,13 @@ struct DjuiProgressBar* djui_progress_bar_create(struct DjuiBase* parent, float*
+     progress->smoothenLow = 0.05f;
+ 
+     djui_base_init(parent, base, NULL, djui_progress_bar_destroy);
++    base->type = DJUI_BASE_TYPE_PROGRESS_BAR;
+     djui_base_set_size_type(base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
+     djui_base_set_size(base, 1.0f, 16);
+     base->on_render_pre = infinite ? djui_progress_bar_render_pre_infinite : djui_progress_bar_render_pre;
+ 
+     struct DjuiRect* rect = djui_rect_create(&progress->base);
++    rect->base.type = DJUI_BASE_TYPE_PROGRESS_TRACK;
+     djui_base_set_size_type(&rect->base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);
+     djui_base_set_size(&rect->base, 1.0f, 1.0f);
+     djui_base_set_color(&rect->base, 0, 0, 0, 0);
+@@ -59,6 +61,7 @@ struct DjuiProgressBar* djui_progress_bar_create(struct DjuiBase* parent, float*
+     progress->rect = rect;
+ 
+     struct DjuiRect* rectValue = djui_rect_create(&rect->base);
++    rectValue->base.type = DJUI_BASE_TYPE_PROGRESS_FILL;
+     djui_base_set_size_type(&rectValue->base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);
+     progress->rectValue = rectValue;
+ 

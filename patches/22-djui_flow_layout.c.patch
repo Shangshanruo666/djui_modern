@@ -1,0 +1,11 @@
+diff --git a/src/pc/djui/djui_flow_layout.c b/src/pc/djui/djui_flow_layout.c
+--- a/src/pc/djui/djui_flow_layout.c
++++ b/src/pc/djui/djui_flow_layout.c
+@@ -51,6 +51,7 @@ struct DjuiFlowLayout* djui_flow_layout_create(struct DjuiBase* parent) {
+     struct DjuiBase* base         = &layout->base;
+ 
+     djui_base_init(parent, base, djui_rect_render, djui_flow_layout_destroy);
++    base->type = DJUI_BASE_TYPE_FLOW_LAYOUT;
+     djui_base_set_size(base, 256, 512);
+ 
+     djui_flow_layout_set_flow_direction(layout, DJUI_FLOW_DIR_DOWN);

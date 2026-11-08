@@ -1,0 +1,258 @@
+diff --git a/src/pc/gfx/gfx_pc.c b/src/pc/gfx/gfx_pc.c
+--- a/src/pc/gfx/gfx_pc.c
++++ b/src/pc/gfx/gfx_pc.c
+@@ -373,11 +373,27 @@ static void import_texture_rgba32(int tile) {
+     gfx_rapi->upload_texture(rdp.loaded_texture[tile].addr, width, height);
+ }
+ 
++/*
++ * RGBA32 纹理直接透传给后端，其余格式需要展开为 RGBA32。
++ * 展开缓冲按实际纹素数量分配，避免固定上限拒绝大尺寸纹理。
++ */
++static uint8_t* sTexConvBuf = NULL;
++static uint32_t sTexConvCap = 0;
++
++static bool tex_conv_reserve(uint32_t pixels) {
++    const uint64_t need = (uint64_t)pixels * 4u;
++    if (need <= sTexConvCap) { return true; }
++    uint8_t* grown = realloc(sTexConvBuf, (size_t)need);
++    if (grown == NULL) { return false; }
++    sTexConvBuf = grown;
++    sTexConvCap = (uint32_t)need;
++    return true;
++}
++
+ static void import_texture_rgba16(int tile) {
+     tile = tile % MAX_TILES;
+     if (!rdp.loaded_texture[tile].addr) { return; }
+-    if (rdp.loaded_texture[tile].size_bytes * 2 > 0x2000) { return; }
+-    uint8_t rgba32_buf[0x2000];
++    if (!tex_conv_reserve(rdp.loaded_texture[tile].size_bytes / 2)) { return; }
+ 
+     for (uint32_t i = 0; i < rdp.loaded_texture[tile].size_bytes / 2; i++) {
+         uint16_t col16 = (rdp.loaded_texture[tile].addr[2 * i] << 8) | rdp.loaded_texture[tile].addr[2 * i + 1];
+@@ -385,23 +401,22 @@ static void import_texture_rgba16(int tile) {
+         uint8_t r = col16 >> 11;
+         uint8_t g = (col16 >> 6) & 0x1f;
+         uint8_t b = (col16 >> 1) & 0x1f;
+-        rgba32_buf[4*i + 0] = SCALE_5_8(r);
+-        rgba32_buf[4*i + 1] = SCALE_5_8(g);
+-        rgba32_buf[4*i + 2] = SCALE_5_8(b);
+-        rgba32_buf[4*i + 3] = a ? 255 : 0;
++        sTexConvBuf[4*i + 0] = SCALE_5_8(r);
++        sTexConvBuf[4*i + 1] = SCALE_5_8(g);
++        sTexConvBuf[4*i + 2] = SCALE_5_8(b);
++        sTexConvBuf[4*i + 3] = a ? 255 : 0;
+     }
+ 
+     uint32_t width = rdp.texture_tile[tile].line_size_bytes / 2;
+     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile[tile].line_size_bytes;
+ 
+-    gfx_rapi->upload_texture(rgba32_buf, width, height);
++    gfx_rapi->upload_texture(sTexConvBuf, width, height);
+ }
+ 
+ static void import_texture_ia4(int tile) {
+     tile = tile % MAX_TILES;
+     if (!rdp.loaded_texture[tile].addr) { return; }
+-    if (rdp.loaded_texture[tile].size_bytes * 8 > 0x8000) { return; }
+-    uint8_t rgba32_buf[0x8000];
++    if (!tex_conv_reserve(rdp.loaded_texture[tile].size_bytes * 2)) { return; }
+ 
+     for (uint32_t i = 0; i < rdp.loaded_texture[tile].size_bytes * 2; i++) {
+         uint8_t byte = rdp.loaded_texture[tile].addr[i / 2];
+@@ -411,23 +426,22 @@ static void import_texture_ia4(int tile) {
+         uint8_t r = intensity;
+         uint8_t g = intensity;
+         uint8_t b = intensity;
+-        rgba32_buf[4*i + 0] = SCALE_3_8(r);
+-        rgba32_buf[4*i + 1] = SCALE_3_8(g);
+-        rgba32_buf[4*i + 2] = SCALE_3_8(b);
+-        rgba32_buf[4*i + 3] = alpha ? 255 : 0;
++        sTexConvBuf[4*i + 0] = SCALE_3_8(r);
++        sTexConvBuf[4*i + 1] = SCALE_3_8(g);
++        sTexConvBuf[4*i + 2] = SCALE_3_8(b);
++        sTexConvBuf[4*i + 3] = alpha ? 255 : 0;
+     }
+ 
+     uint32_t width = rdp.texture_tile[tile].line_size_bytes * 2;
+     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile[tile].line_size_bytes;
+ 
+-    gfx_rapi->upload_texture(rgba32_buf, width, height);
++    gfx_rapi->upload_texture(sTexConvBuf, width, height);
+ }
+ 
+ static void import_texture_ia8(int tile) {
+     tile = tile % MAX_TILES;
+     if (!rdp.loaded_texture[tile].addr) { return; }
+-    if (rdp.loaded_texture[tile].size_bytes * 4 > 0x4000) { return; }
+-    uint8_t rgba32_buf[0x4000];
++    if (!tex_conv_reserve(rdp.loaded_texture[tile].size_bytes)) { return; }
+ 
+     for (uint32_t i = 0; i < rdp.loaded_texture[tile].size_bytes; i++) {
+         uint8_t intensity = rdp.loaded_texture[tile].addr[i] >> 4;
+@@ -435,23 +449,22 @@ static void import_texture_ia8(int tile) {
+         uint8_t r = intensity;
+         uint8_t g = intensity;
+         uint8_t b = intensity;
+-        rgba32_buf[4*i + 0] = SCALE_4_8(r);
+-        rgba32_buf[4*i + 1] = SCALE_4_8(g);
+-        rgba32_buf[4*i + 2] = SCALE_4_8(b);
+-        rgba32_buf[4*i + 3] = SCALE_4_8(alpha);
++        sTexConvBuf[4*i + 0] = SCALE_4_8(r);
++        sTexConvBuf[4*i + 1] = SCALE_4_8(g);
++        sTexConvBuf[4*i + 2] = SCALE_4_8(b);
++        sTexConvBuf[4*i + 3] = SCALE_4_8(alpha);
+     }
+ 
+     uint32_t width = rdp.texture_tile[tile].line_size_bytes;
+     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile[tile].line_size_bytes;
+ 
+-    gfx_rapi->upload_texture(rgba32_buf, width, height);
++    gfx_rapi->upload_texture(sTexConvBuf, width, height);
+ }
+ 
+ static void import_texture_ia16(int tile) {
+     tile = tile % MAX_TILES;
+     if (!rdp.loaded_texture[tile].addr) { return; }
+-    if (rdp.loaded_texture[tile].size_bytes * 2 > 0x2000) { return; }
+-    uint8_t rgba32_buf[0x2000];
++    if (!tex_conv_reserve(rdp.loaded_texture[tile].size_bytes / 2)) { return; }
+ 
+     for (uint32_t i = 0; i < rdp.loaded_texture[tile].size_bytes / 2; i++) {
+         uint8_t intensity = rdp.loaded_texture[tile].addr[2 * i];
+@@ -459,64 +472,61 @@ static void import_texture_ia16(int tile) {
+         uint8_t r = intensity;
+         uint8_t g = intensity;
+         uint8_t b = intensity;
+-        rgba32_buf[4*i + 0] = r;
+-        rgba32_buf[4*i + 1] = g;
+-        rgba32_buf[4*i + 2] = b;
+-        rgba32_buf[4*i + 3] = alpha;
++        sTexConvBuf[4*i + 0] = r;
++        sTexConvBuf[4*i + 1] = g;
++        sTexConvBuf[4*i + 2] = b;
++        sTexConvBuf[4*i + 3] = alpha;
+     }
+ 
+     uint32_t width = rdp.texture_tile[tile].line_size_bytes / 2;
+     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile[tile].line_size_bytes;
+ 
+-    gfx_rapi->upload_texture(rgba32_buf, width, height);
++    gfx_rapi->upload_texture(sTexConvBuf, width, height);
+ }
+ 
+ static void import_texture_i4(int tile) {
+     tile = tile % MAX_TILES;
+     if (!rdp.loaded_texture[tile].addr) { return; }
+-    if (rdp.loaded_texture[tile].size_bytes * 8 > 0x8000) { return; }
+-    uint8_t rgba32_buf[0x8000];
++    if (!tex_conv_reserve(rdp.loaded_texture[tile].size_bytes * 2)) { return; }
+ 
+     for (uint32_t i = 0; i < rdp.loaded_texture[tile].size_bytes * 2; i++) {
+         uint8_t byte = rdp.loaded_texture[tile].addr[i / 2];
+         uint8_t intensity = (byte >> (4 - (i % 2) * 4)) & 0xf;
+-        rgba32_buf[4*i + 0] = SCALE_4_8(intensity);
+-        rgba32_buf[4*i + 1] = SCALE_4_8(intensity);
+-        rgba32_buf[4*i + 2] = SCALE_4_8(intensity);
+-        rgba32_buf[4*i + 3] = 255;
++        sTexConvBuf[4*i + 0] = SCALE_4_8(intensity);
++        sTexConvBuf[4*i + 1] = SCALE_4_8(intensity);
++        sTexConvBuf[4*i + 2] = SCALE_4_8(intensity);
++        sTexConvBuf[4*i + 3] = 255;
+     }
+ 
+     uint32_t width = rdp.texture_tile[tile].line_size_bytes * 2;
+     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile[tile].line_size_bytes;
+ 
+-    gfx_rapi->upload_texture(rgba32_buf, width, height);
++    gfx_rapi->upload_texture(sTexConvBuf, width, height);
+ }
+ 
+ static void import_texture_i8(int tile) {
+     tile = tile % MAX_TILES;
+     if (!rdp.loaded_texture[tile].addr) { return; }
+-    if (rdp.loaded_texture[tile].size_bytes * 4 > 0x4000) { return; }
+-    uint8_t rgba32_buf[0x4000];
++    if (!tex_conv_reserve(rdp.loaded_texture[tile].size_bytes)) { return; }
+ 
+     for (uint32_t i = 0; i < rdp.loaded_texture[tile].size_bytes; i++) {
+         uint8_t intensity = rdp.loaded_texture[tile].addr[i];
+-        rgba32_buf[4*i + 0] = intensity;
+-        rgba32_buf[4*i + 1] = intensity;
+-        rgba32_buf[4*i + 2] = intensity;
+-        rgba32_buf[4*i + 3] = 255;
++        sTexConvBuf[4*i + 0] = intensity;
++        sTexConvBuf[4*i + 1] = intensity;
++        sTexConvBuf[4*i + 2] = intensity;
++        sTexConvBuf[4*i + 3] = 255;
+     }
+ 
+     uint32_t width = rdp.texture_tile[tile].line_size_bytes;
+     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile[tile].line_size_bytes;
+ 
+-    gfx_rapi->upload_texture(rgba32_buf, width, height);
++    gfx_rapi->upload_texture(sTexConvBuf, width, height);
+ }
+ 
+ static void import_texture_ci4(int tile) {
+     tile = tile % MAX_TILES;
+     if (!rdp.loaded_texture[tile].addr) { return; }
+-    if (rdp.loaded_texture[tile].size_bytes * 8 > 0x8000) { return; }
+-    uint8_t rgba32_buf[0x8000];
++    if (!tex_conv_reserve(rdp.loaded_texture[tile].size_bytes * 2)) { return; }
+ 
+     uint32_t palIndex = rdp.texture_tile[tile].palette;
+     const uint8_t* palette;
+@@ -533,23 +543,22 @@ static void import_texture_ci4(int tile) {
+         uint8_t r = col16 >> 11;
+         uint8_t g = (col16 >> 6) & 0x1f;
+         uint8_t b = (col16 >> 1) & 0x1f;
+-        rgba32_buf[4*i + 0] = SCALE_5_8(r);
+-        rgba32_buf[4*i + 1] = SCALE_5_8(g);
+-        rgba32_buf[4*i + 2] = SCALE_5_8(b);
+-        rgba32_buf[4*i + 3] = a ? 255 : 0;
++        sTexConvBuf[4*i + 0] = SCALE_5_8(r);
++        sTexConvBuf[4*i + 1] = SCALE_5_8(g);
++        sTexConvBuf[4*i + 2] = SCALE_5_8(b);
++        sTexConvBuf[4*i + 3] = a ? 255 : 0;
+     }
+ 
+     uint32_t width = rdp.texture_tile[tile].line_size_bytes * 2;
+     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile[tile].line_size_bytes;
+ 
+-    gfx_rapi->upload_texture(rgba32_buf, width, height);
++    gfx_rapi->upload_texture(sTexConvBuf, width, height);
+ }
+ 
+ static void import_texture_ci8(int tile) {
+     tile = tile % MAX_TILES;
+     if (!rdp.loaded_texture[tile].addr) { return; }
+-    if (rdp.loaded_texture[tile].size_bytes * 4 > 0x4000) { return; }
+-    uint8_t rgba32_buf[0x4000];
++    if (!tex_conv_reserve(rdp.loaded_texture[tile].size_bytes)) { return; }
+ 
+     for (uint32_t i = 0; i < rdp.loaded_texture[tile].size_bytes; i++) {
+         uint8_t idx = rdp.loaded_texture[tile].addr[i];
+@@ -559,16 +568,16 @@ static void import_texture_ci8(int tile) {
+         uint8_t r = col16 >> 11;
+         uint8_t g = (col16 >> 6) & 0x1f;
+         uint8_t b = (col16 >> 1) & 0x1f;
+-        rgba32_buf[4*i + 0] = SCALE_5_8(r);
+-        rgba32_buf[4*i + 1] = SCALE_5_8(g);
+-        rgba32_buf[4*i + 2] = SCALE_5_8(b);
+-        rgba32_buf[4*i + 3] = a ? 255 : 0;
++        sTexConvBuf[4*i + 0] = SCALE_5_8(r);
++        sTexConvBuf[4*i + 1] = SCALE_5_8(g);
++        sTexConvBuf[4*i + 2] = SCALE_5_8(b);
++        sTexConvBuf[4*i + 3] = a ? 255 : 0;
+     }
+ 
+     uint32_t width = rdp.texture_tile[tile].line_size_bytes;
+     uint32_t height = rdp.loaded_texture[tile].size_bytes / rdp.texture_tile[tile].line_size_bytes;
+ 
+-    gfx_rapi->upload_texture(rgba32_buf, width, height);
++    gfx_rapi->upload_texture(sTexConvBuf, width, height);
+ }
+ 
+ static void import_texture(int tile) {

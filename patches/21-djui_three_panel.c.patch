@@ -1,0 +1,11 @@
+diff --git a/src/pc/djui/djui_three_panel.c b/src/pc/djui/djui_three_panel.c
+--- a/src/pc/djui/djui_three_panel.c
++++ b/src/pc/djui/djui_three_panel.c
+@@ -169,6 +169,7 @@ struct DjuiThreePanel* djui_three_panel_create(struct DjuiBase* parent, f32 minH
+     struct DjuiBase* base = &threePanel->base;
+ 
+     djui_base_init(parent, base, djui_three_panel_render, djui_three_panel_destroy);
++    base->type = DJUI_BASE_TYPE_PANEL;
+     djui_three_panel_set_min_header_size(threePanel, minHeaderSize);
+     djui_three_panel_set_body_size(threePanel, bodySize);
+     djui_three_panel_set_min_footer_size(threePanel, minFooterSize);

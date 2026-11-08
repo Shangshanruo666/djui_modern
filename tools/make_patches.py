@@ -35,7 +35,7 @@ import subprocess
 import sys
 
 # 与 DEVELOPMENT.md 的“上游补丁边界”表保持一致。
-# 钩子原型写在调用它的 .c 文件中，因此不修改上游头文件。
+# 钩子原型写在调用它的 .c 文件中；djui_base.h 只承载控件类别数据结构。
 TARGET_FILES = [
     "Makefile",
     "src/pc/djui/djui.c",
@@ -44,8 +44,21 @@ TARGET_FILES = [
     "src/pc/djui/djui_hud_utils.c",
     "src/pc/djui/djui_unicode.c",
     "src/pc/djui/djui_text.c",
-    "src/pc/djui/djui_panel_host_mods.c",
+    "src/pc/djui/djui_panel_menu_options.c",
     "src/pc/gfx/gfx_dxgi.cpp",
+    "src/pc/gfx/gfx_pc.c",
+    "src/pc/djui/djui_base.h",
+    "src/pc/djui/djui_base.c",
+    "src/pc/djui/djui_button.c",
+    "src/pc/djui/djui_checkbox.c",
+    "src/pc/djui/djui_slider.c",
+    "src/pc/djui/djui_inputbox.c",
+    "src/pc/djui/djui_selectionbox.c",
+    "src/pc/djui/djui_progress_bar.c",
+    "src/pc/djui/djui_bind.c",
+    "src/pc/djui/djui_chat_box.c",
+    "src/pc/djui/djui_three_panel.c",
+    "src/pc/djui/djui_flow_layout.c",
 ]
 
 ANDROID_ONLY_TARGET_FILES = [
@@ -55,7 +68,11 @@ ANDROID_ONLY_TARGET_FILES = [
 
 def read_lf(path):
     with open(path, "rb") as f:
-        return f.read().replace(b"\r\n", b"\n")
+        data = f.read().replace(b"\r\n", b"\n")
+    # 文件末尾换行不属于功能改动，统一去掉，避免补丁末尾多出无意义 hunk。
+    if data.endswith(b"\n"):
+        data = data[:-1]
+    return data
 
 
 def make_patch(rel, old_bytes, new_bytes):
@@ -154,8 +171,7 @@ def _find_line(lines, text, hint):
 def _apply_hunk(lines, hunk, hint):
     """把一个 hunk 落到 lines 上。
 
-    hunk 里可能有**多段**新增（git 会把靠得近的改动合并进同一个 hunk），
-    所以不能简单地按"一段新增"处理 —— 直接构造：
+    git 可能把靠得近的多段新增合并进同一个 hunk，因此按整体构造：
         search  = hunk 里所有非 '+' 行（原样）
         replace = hunk 里所有非 '-' 行（打补丁后应有的样子）
     """

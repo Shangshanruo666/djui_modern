@@ -51,6 +51,24 @@ void djui_modern_rrect_draw(struct DjuiBaseRect* clip,
                             u8 alphaScale);
 
 /*
+ * 滑条：在 track 内一次画出填充和边框。
+ *
+ * fillFraction 的取值限定在 0..1。常规值由左圆角帽和整高直段组成，右端
+ * 保持垂直截止并由最后绘制的边框形成右圆角；短填充直接按左圆角曲线裁剪。
+ * 满值填充使用完整的圆角内框，不保留右端截面。
+ */
+void djui_modern_rrect_draw_slider(struct DjuiBaseRect* clip,
+                                   struct DjuiBaseRect* track,
+                                   enum DjuiModernRadius radiusKind,
+                                   f32 explicitRadius,
+                                   f32 borderWidth,
+                                   f32 fillFraction,
+                                   struct DjuiColor borderColor,
+                                   struct DjuiColor topColor,
+                                   struct DjuiColor bottomColor,
+                                   u8 alphaScale);
+
+/*
  * 返回给定半径策略与边框宽度下的外轮廓半径，即可见半径加边框宽度，
  * 并按短边一半封顶。绘制控件外侧的阴影时需要使用该值。
  */
@@ -58,6 +76,9 @@ f32 djui_modern_rrect_outer_radius(struct DjuiBaseRect* comp,
                                    enum DjuiModernRadius radiusKind,
                                    f32 explicitRadius,
                                    f32 borderWidth);
+
+/* 给定尺寸下的圆角半径。 */
+f32 djui_modern_rrect_radius(enum DjuiModernRadius radiusKind, f32 width, f32 height);
 
 /*
  * 边框 + 填充的圆角矩形。

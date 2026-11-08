@@ -50,3 +50,4 @@ diff --git a/src/pc/djui/djui.c b/src/pc/djui/djui.c
      djui_interactable_update();
      djui_gfx_displaylist_end();
  }
+\ No newline at end of file

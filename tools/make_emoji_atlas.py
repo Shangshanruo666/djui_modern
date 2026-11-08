@@ -186,6 +186,33 @@ def _dump_byte_array(blob, per_line=20):
     return "".join(out)
 
 
+ATLAS_PART_BYTES = 512 * 1024
+
+
+def write_atlas_parts(path, array_name, blob):
+    """把图集字节写入多个 C 源文件，返回分片名与长度。
+
+    头文件只保存分片描述，避免每次重编字体图集时解析数 MB 的字面量。
+    """
+    out_dir = os.path.dirname(path) or "."
+    stem = os.path.splitext(os.path.basename(path))[0]
+    parts = max(1, (len(blob) + ATLAS_PART_BYTES - 1) // ATLAS_PART_BYTES)
+    per_part = (len(blob) + parts - 1) // parts
+    names = []
+    for index in range(parts):
+        chunk = blob[index * per_part:(index + 1) * per_part]
+        part_name = "%s_part%d" % (array_name, index)
+        names.append((part_name, len(chunk)))
+        part_path = os.path.join(out_dir, "%s_%02d.c" % (stem, index))
+        with open(part_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write("// 自动生成，请勿手工编辑。\n")
+            f.write('#include "macros.h"\n\n')
+            f.write("ALIGNED16 const unsigned char %s[] = {\n" % part_name)
+            f.write(_dump_byte_array(chunk))
+            f.write("};\n")
+    return names
+
+
 def safe_grid(count, size):
     """返回容纳 count 格且不超过 S10.5 上限的 POT 网格。
 
@@ -242,9 +269,14 @@ def write_emoji_header(path, cps, blob, blob_kind, atlas_png, size, gx, gy,
             chunk = cps[i:i + 12]
             w("    " + "".join("0x%04x," % c for c in chunk) + "\n")
         w("};\n\n")
-        w(f"/* 图集：{blob_kind}，{len(blob)} 字节。 */\n")
-        w("ALIGNED16 static const unsigned char sDjuiModernEmojiAtlas[] = {\n")
-        w(_dump_byte_array(blob))
+        parts = write_atlas_parts(path, "sDjuiModernEmojiAtlas", blob)
+        w(f"/* 图集：{blob_kind}，{len(blob)} 字节，按 {ATLAS_PART_BYTES} 字节分片。 */\n")
+        w("struct DjuiModernAtlasPart { const unsigned char* data; unsigned int size; };\n")
+        for name, _size in parts:
+            w(f"extern const unsigned char {name}[];\n")
+        w("static const struct DjuiModernAtlasPart sDjuiModernEmojiAtlas[] = {\n")
+        for name, size in parts:
+            w(f"    {{ {name}, {size}u }},\n")
         w("};\n")
 
 
@@ -286,9 +318,14 @@ def write_flag_header(path, flags, blob, blob_kind, atlas_png, size, gx, gy,
             chunk = keys[i:i + 12]
             w("    " + "".join("0x%04x," % k for k in chunk) + "\n")
         w("};\n\n")
-        w(f"/* 国旗图集：{blob_kind}，{len(blob)} 字节。 */\n")
-        w("ALIGNED16 static const unsigned char sDjuiModernFlagAtlas[] = {\n")
-        w(_dump_byte_array(blob))
+        parts = write_atlas_parts(path, "sDjuiModernFlagAtlas", blob)
+        w(f"/* 国旗图集：{blob_kind}，{len(blob)} 字节，按 {ATLAS_PART_BYTES} 字节分片。 */\n")
+        w("struct DjuiModernAtlasPart { const unsigned char* data; unsigned int size; };\n")
+        for name, _size in parts:
+            w(f"extern const unsigned char {name}[];\n")
+        w("static const struct DjuiModernAtlasPart sDjuiModernFlagAtlas[] = {\n")
+        for name, size in parts:
+            w(f"    {{ {name}, {size}u }},\n")
         w("};\n")
 
 

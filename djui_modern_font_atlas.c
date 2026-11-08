@@ -98,10 +98,6 @@ typedef struct {
 static FontFace sFaces[FONT_MAX];
 static s32      sFaceCount = 0;
 
-/* 供 ImGui 构建字体图谱的中文字体数据；生命周期与字体链一致。 */
-static const u8* sCjkFontData = NULL;
-static u32 sCjkFontSize = 0;
-
 /*
  * 当前正在使用的字体。
  *
@@ -681,8 +677,6 @@ static void font_load_chain(void) {
         if (data != NULL && font_face_setup(&sFaces[sFaceCount], data, size,
                                             true, DJUI_MODERN_CJK_FONT_NAME)) {
             sFaceCount++;
-            sCjkFontData = data;
-            sCjkFontSize = size;
         }
     }
 #endif
@@ -909,10 +903,6 @@ void djui_modern_font_atlas_pass_begin(void) {
 bool djui_modern_font_atlas_ready(void) { return sReady; }
 const char* djui_modern_font_atlas_name(void) { return sFontName; }
 
-const unsigned char* djui_modern_font_atlas_cjk_data(unsigned int* size) {
-    if (size != NULL) { *size = sCjkFontSize; }
-    return sCjkFontData;
-}
 
 void djui_modern_font_atlas_stats(u32* atlasPixels, u32* glyphCount, u32* uploads) {
     if (atlasPixels) { *atlasPixels = sGlyphBytes; }
@@ -1240,16 +1230,34 @@ static void bind_glyph_texture(const GlyphSlot* g) {
  */
 
 #if defined(DJUI_MODERN_EMOJI_COUNT)
+/* 图集数据按分片存放，解码前拼接成连续缓冲。 */
+static u8* atlas_join(const struct DjuiModernAtlasPart* parts, s32 count) {
+    u32 total = 0;
+    for (s32 i = 0; i < count; i++) { total += parts[i].size; }
+    u8* data = (u8*)malloc(total);
+    if (data == NULL) { return NULL; }
+    u32 offset = 0;
+    for (s32 i = 0; i < count; i++) {
+        memcpy(data + offset, parts[i].data, parts[i].size);
+        offset += parts[i].size;
+    }
+    return data;
+}
+
 /*
  * 内嵌图集以 PNG 保存，启动时解码为 RGBA32。解码失败时图集指针保持空，
  * 渲染回退到原版 Emoji。
  */
 static void emoji_atlas_prepare(void) {
 #if DJUI_MODERN_EMOJI_ATLAS_PNG
+    const s32 partCount = (s32)(sizeof(sDjuiModernEmojiAtlas) / sizeof(sDjuiModernEmojiAtlas[0]));
+    u8* packed = atlas_join(sDjuiModernEmojiAtlas, partCount);
+    if (packed == NULL) { return; }
     s32 w = 0, h = 0, ch = 0;
-    stbi_uc* px = stbi_load_from_memory(sDjuiModernEmojiAtlas,
+    stbi_uc* px = stbi_load_from_memory(packed,
                                         (int)DJUI_MODERN_EMOJI_ATLAS_SIZE,
                                         &w, &h, &ch, 4);
+    free(packed);
     if (px == NULL) {
         LOG_ERROR("djui_modern: emoji atlas PNG decode failed (%d bytes); "
                   "falling back to vanilla emoji", (int)DJUI_MODERN_EMOJI_ATLAS_SIZE);
@@ -1276,10 +1284,14 @@ static void emoji_atlas_prepare(void) {
 /* 国旗图集：另一张图，同样处理；失败则国旗整体不接管（退回普通字形路径）。 */
 static void flag_atlas_prepare(void) {
 #if DJUI_MODERN_FLAG_ATLAS_PNG
+    const s32 partCount = (s32)(sizeof(sDjuiModernFlagAtlas) / sizeof(sDjuiModernFlagAtlas[0]));
+    u8* packed = atlas_join(sDjuiModernFlagAtlas, partCount);
+    if (packed == NULL) { return; }
     s32 w = 0, h = 0, ch = 0;
-    stbi_uc* px = stbi_load_from_memory(sDjuiModernFlagAtlas,
+    stbi_uc* px = stbi_load_from_memory(packed,
                                         (int)DJUI_MODERN_FLAG_ATLAS_SIZE,
                                         &w, &h, &ch, 4);
+    free(packed);
     if (px == NULL) {
         LOG_ERROR("djui_modern: flag atlas PNG decode failed (%d bytes); "
                   "flags disabled", (int)DJUI_MODERN_FLAG_ATLAS_SIZE);
