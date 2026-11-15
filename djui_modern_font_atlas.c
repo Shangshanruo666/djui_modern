@@ -43,7 +43,7 @@ typedef char djui_modern_emoji_atlas_dim_ok[
 #endif
 
 /*
- * 每个字符和字号档位使用一张独立的二次幂 RGBA 纹理。
+ * 每个字符和字号档位使用一张独立的二次幂 IA8 纹理。
  * 纹理生成后不再修改，因此可安全依赖 gfx_pc 的指针缓存。
  */
 
@@ -433,10 +433,11 @@ static s32 charset_lookup(u32 cp) {
 /*
  * 把 stb 输出的 8 位覆盖度位图落成一张独立的 POT IA8 纹理。
  * 高 4 位强度恒为满值，低 4 位保存覆盖度，字形颜色由 G_CC_FADEA 的 ENV 决定。
+ * 墨迹四周保留 1 像素透明边距，使线性过滤的边界取样不越出字形覆盖区。
  */
 static bool glyph_make_texture(GlyphSlot* g, const u8* bmp, s32 bw, s32 bh) {
-    const s32 tw = pot_ceil(bw);
-    const s32 th = pot_ceil(bh);
+    const s32 tw = pot_ceil(bw + 2);
+    const s32 th = pot_ceil(bh + 2);
     if (tw < bw || th < bh || tw > GLYPH_TEX_MAX || th > GLYPH_TEX_MAX) {
         return false;
     }
@@ -455,7 +456,7 @@ static bool glyph_make_texture(GlyphSlot* g, const u8* bmp, s32 bw, s32 bh) {
     if (tex == NULL) { return false; }
     for (s32 y = 0; y < bh; y++) {
         const u8* src = bmp + (size_t)y * bw;
-        u8* dst = tex + (size_t)y * tw;
+        u8* dst = tex + (size_t)(y + 1) * tw + 1;
         for (s32 x = 0; x < bw; x++) {
             dst[x] = (u8)(0xF0u | (src[x] >> 4));
         }
@@ -1646,10 +1647,11 @@ void djui_modern_font_atlas_render_char(const char* c) {
     const f32 y0 = sBaselineY + (-(f32)g->yoff) * invRaster;
     const f32 y1 = sBaselineY - ((f32)(g->yoff + g->bh)) * invRaster;
 
-    const u16 u0 = 0;
-    const u16 u1 = (u16)((u32)g->bw << 5);
-    const u16 v0 = 0;
-    const u16 v1 = (u16)((u32)g->bh << 5);
+    /* UV 覆盖墨迹及四周各 1 像素的透明边距。 */
+    const u16 u0 = 1 << 5;
+    const u16 v0 = 1 << 5;
+    const u16 u1 = (u16)((u32)(g->bw + 1) << 5);
+    const u16 v1 = (u16)((u32)(g->bh + 1) << 5);
 
     Vtx* vtx = vtx_alloc();
     if (vtx == NULL) { return; }

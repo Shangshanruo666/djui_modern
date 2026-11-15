@@ -9,8 +9,8 @@
 
 | 用途 | 文件 | 内容 | 授权 |
 | --- | --- | --- | --- |
-| 西文与通用标点 | `RobotoCondensed-Subset.ttf` | 121 KB，1317 个字形，922 个映射码点 | SIL OFL 1.1 |
-| 中文字形补充 | `SourceHanSansSC-Subset.otf` | 13 MB，46926 个字形，27987 个映射码点 | SIL OFL 1.1 |
+| 西文与通用标点 | `RobotoCondensed-Subset.ttf` | 17 KB，138 个字形，129 个映射码点 | SIL OFL 1.1 |
+| 中文字形补充 | `SourceHanSansSC-Subset.otf` | 1.78 MB，6964 个字形，6930 个映射码点 | SIL OFL 1.1 |
 | 星星 | `Power Star.otf` | 2 KB，2 个字形，1 个映射码位（U+007F） | SIL OFL 1.1 |
 | Emoji 源字体 | `Noto-3D-128-Subset.ttf` | 14 MB，461 个字形，位图数据 | SIL OFL 1.1 |
 | 国旗源字体 | `Noto-3D-128-flagsonly-Subset.ttf` | 6.9 MB，279 个字形，位图数据 | SIL OFL 1.1 |
@@ -37,38 +37,19 @@ U+007F，是该码位的唯一来源。
 外部字体位于字体链首位，内嵌字体继续提供缺字回退。包含完整汉字的外部字体
 会优先命中自身字形，不需要修改内嵌字体。
 
-## 字符范围
+## 中文字符范围
 
-收录范围由 Unicode 区段表给出，两个内嵌字体的并集覆盖下列区段：
+Source Han Sans SC 子集从以下字符集合生成：
 
-| 区段 | 码点范围 |
-| --- | --- |
-| ASCII | U+0020-U+007E |
-| Latin-1 Supplement | U+0080-U+00FF |
-| Latin Extended-A | U+0100-U+017F |
-| Latin Extended-B | U+0180-U+024F |
-| Cyrillic | U+0400-U+04FF |
-| Cyrillic Supplement | U+0500-U+052F |
-| General Punctuation | U+2000-U+206F |
-| CJK 标点及全角空格 | U+3000-U+303F |
-| 平假名与片假名 | U+3040-U+30FF |
-| CJK 扩展 A | U+3400-U+4DBF |
-| CJK 基本区 | U+4E00-U+9FFF |
-| 全角形式常用子集 | U+FF01-U+FF5E |
-| 半角片假名 | U+FF66-U+FF9D |
+- `src/pc/djui/cn_glyphs.h` 中的全部游戏字符。
+- GB2312 编码区中的标点和符号。
+- GB2312 全部汉字，6763 个字符。
 
-区段表覆盖中文与日文文本、玩家命名和 mod 文本用到的字符，繁简汉字同表。
-Emoji 由独立彩色图集渲染，不在矢量字体的收录范围内。
+生成器直接解析该字表。生成时排除 Roboto Condensed 子集的全部 129 个映射码点，
+最终中文子集包含 6930 个映射码点和 6964 个字形。
 
-Roboto Condensed 子集收录 922 个映射码点。Source Han Sans SC 子集排除
-Roboto 已提供的码点后收录其余字符，共 27987 个映射码点。
-两份内嵌字体的 cmap 没有交集。
-
-字体数据按 1.5 MB 分片生成，每片是独立的 C 源文件。声明头只保存数组
-描述，构建时各分片可并行编译。
-
-区段表之外的字形使用回退字符。需要 CJK 扩展 B 及以后的生僻字时，
-可通过 `font_path` 指定完整字体，或将字体放入上述外部字体目录。
+超出该范围的字符使用回退字形。需要生僻字时，可通过 `font_path` 指定完整字体，
+或将字体放入上述外部字体目录。
 
 ## Emoji 与国旗
 
@@ -101,13 +82,14 @@ python src/pc/djui_modern/tools/make_subset_font.py \
 
 ### Source Han Sans SC
 
-中文子集按同一区段表生成，再通过 `--exclude-font` 排除 Roboto 已提供的字符：
+中文子集通过 `--exclude-font` 排除 Roboto 已提供的字符：
 
 ```sh
 python src/pc/djui_modern/tools/make_subset_font.py \
   build/SourceHanSansSC-Regular.otf \
   src/pc/djui_modern/font/SourceHanSansSC-Subset.otf \
-  --han none \
+  --han gb2312 \
+  --glyph-source src/pc/djui/cn_glyphs.h \
   --exclude-font src/pc/djui_modern/font/RobotoCondensed-Subset.ttf
 ```
 
@@ -181,24 +163,6 @@ print(len(set(a.getBestCmap()) & set(b.getBestCmap())))"
 ```
 
 预期输出为 `0`。
-
-确认两份内嵌字体的并集覆盖全部收录区段：
-
-```sh
-python -c "
-from fontTools.ttLib import TTFont
-a = TTFont('src/pc/djui_modern/font/RobotoCondensed-Subset.ttf').getBestCmap()
-b = TTFont('src/pc/djui_modern/font/SourceHanSansSC-Subset.otf').getBestCmap()
-ranges = [(0x20,0x7E),(0x80,0xFF),(0x100,0x17F),(0x180,0x24F),
-          (0x400,0x4FF),(0x500,0x52F),(0x2000,0x206F),(0x3000,0x303F),
-          (0x3040,0x30FF),(0x3400,0x4DBF),(0x4E00,0x9FFF),
-          (0xFF01,0xFF5E),(0xFF66,0xFF9D)]
-missing = [c for lo,hi in ranges for c in range(lo,hi+1) if c not in a and c not in b]
-print(len(missing))"
-```
-
-输出为 Unicode 未分配位（控制符、孤立代理对、方向控制符）的数量，其余码位
-都应有字形。
 
 使用字体探针检查汉字能否被 stb_truetype 正常打开和光栅化：
 

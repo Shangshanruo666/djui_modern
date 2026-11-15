@@ -204,14 +204,14 @@ static void settings_slider_foreground_pre(struct DjuiBase* base, bool* skipRend
     if (skipRender != NULL) { *skipRender = false; }
     if (base == NULL || base->parent == NULL) { return; }
 
+    // 宽度按填充比例的倒数展开，使文字基准覆盖整条轨道；填充父节点负责裁剪。
     const f32 fillFraction = base->parent->width.value;
     const f32 widthScale = (fillFraction > 0.001f) ? (1.0f / fillFraction) : 1.0f;
     djui_base_set_location_type(base, DJUI_SVT_ABSOLUTE, DJUI_SVT_ABSOLUTE);
     djui_base_set_location(base, 0, 0);
     djui_base_set_size_type(base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);
     djui_base_set_size(base, widthScale, 1.0f);
-    djui_text_set_alignment((struct DjuiText*)base,
-                            DJUI_HALIGN_CENTER, DJUI_VALIGN_CENTER);
+    djui_text_set_alignment((struct DjuiText*)base, DJUI_HALIGN_CENTER, DJUI_VALIGN_CENTER);
 }
 
 static void settings_row_create(struct DjuiBase* list, size_t index) {

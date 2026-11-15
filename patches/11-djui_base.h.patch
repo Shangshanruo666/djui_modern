@@ -1,7 +1,7 @@
 diff --git a/src/pc/djui/djui_base.h b/src/pc/djui/djui_base.h
 --- a/src/pc/djui/djui_base.h
 +++ b/src/pc/djui/djui_base.h
-@@ -20,9 +20,38 @@ struct DjuiBasePadding {
+@@ -20,9 +20,36 @@ struct DjuiBasePadding {
      struct DjuiScreenValue left;
  };
  
@@ -19,8 +19,6 @@ diff --git a/src/pc/djui/djui_base.h b/src/pc/djui/djui_base.h
 +    DJUI_BASE_TYPE_CHECKBOX,
 +    DJUI_BASE_TYPE_CHECKBOX_FRAME,
 +    DJUI_BASE_TYPE_CHECKBOX_VALUE,
-+    DJUI_BASE_TYPE_SLIDER,
-+    DJUI_BASE_TYPE_SLIDER_TRACK,
 +    DJUI_BASE_TYPE_SLIDER_FILL,
 +    DJUI_BASE_TYPE_INPUTBOX,
 +    DJUI_BASE_TYPE_SELECTIONBOX,

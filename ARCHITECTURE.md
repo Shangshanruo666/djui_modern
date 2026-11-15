@@ -55,7 +55,7 @@ Lua 接口仍由原版代码负责。
 | --- | --- | --- |
 | 面板 | `PANEL` | 面板圆角和投影 |
 | 交互控件 | `BUTTON_SURFACE`、`INPUTBOX`、`SELECTIONBOX_BOX` | 控件圆角和主题色 |
-| 滑条 | `SLIDER_TRACK`、`SLIDER_FILL` | 轨道统一绘制内沿填充和边框 |
+| 滑条 | `SLIDER_FILL` | 包含填充子节点的轨道统一绘制内沿填充和边框 |
 | 复选框 | `CHECKBOX_FRAME`、`CHECKBOX_VALUE` | 交回原版绘制 |
 | 通用矩形 | `RECT`、`GENERIC` | 按普通控件绘制 |
 

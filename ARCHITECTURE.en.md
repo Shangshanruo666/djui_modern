@@ -62,7 +62,7 @@ colors, or child-node structure.
 | --- | --- | --- |
 | Panels | `PANEL` | Panel radius and shadow |
 | Interactive controls | `BUTTON_SURFACE`, `INPUTBOX`, `SELECTIONBOX_BOX` | Control radius and theme color |
-| Sliders | `SLIDER_TRACK`, `SLIDER_FILL` | Track draws the inset fill and border once |
+| Sliders | `SLIDER_FILL` | The containing track draws the inset fill and border once |
 | Checkboxes | `CHECKBOX_FRAME`, `CHECKBOX_VALUE` | Original renderer |
 | Generic rectangles | `RECT`, `GENERIC` | Regular control rendering |
 

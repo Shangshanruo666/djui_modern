@@ -143,10 +143,10 @@ if (djui_modern_rect_override(base)) {
 
 ### 控件类别
 
-原版控件构造函数写入 `DjuiBase.type`。模块的矩形接管入口只检查该字段：
+`DjuiBase.type` 只记录无法从原版结构可靠推断的角色：
 
-- `SLIDER_TRACK` 查找 `SLIDER_FILL` 子节点并按比例统一绘制。
-- `CHECKBOX_FRAME` 和 `CHECKBOX_VALUE` 交回原版绘制。
+- 滑条轨道通过 `SLIDER_FILL` 子节点识别并按比例统一绘制。
+- `CHECKBOX_FRAME` 及其子节点交回原版绘制。
 - `PANEL` 使用面板圆角和投影。
 - 按钮面、输入框、选择框和绑定按钮使用普通控件圆角。
 

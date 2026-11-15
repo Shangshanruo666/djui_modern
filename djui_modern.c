@@ -90,10 +90,10 @@ static bool base_is_checkbox_part(struct DjuiBase* base) {
             || base->type == DJUI_BASE_TYPE_CHECKBOX_VALUE);
 }
 
-static struct DjuiBase* base_child_of_type(struct DjuiBase* base, enum DjuiBaseType type) {
+static struct DjuiBase* slider_fill(struct DjuiBase* base) {
     if (base == NULL) { return NULL; }
     for (struct DjuiBaseChild* child = base->child; child != NULL; child = child->next) {
-        if (child->base->type == type) { return child->base; }
+        if (child->base->type == DJUI_BASE_TYPE_SLIDER_FILL) { return child->base; }
     }
     return NULL;
 }
@@ -401,7 +401,7 @@ static void apply_theme(struct DjuiBase* base, bool fillContainer) {
     }
 
     const bool isControlSurface = base->type == DJUI_BASE_TYPE_BUTTON_SURFACE
-                               || base->type == DJUI_BASE_TYPE_SLIDER_TRACK
+                               || slider_fill(base) != NULL
                                || base->type == DJUI_BASE_TYPE_SELECTIONBOX_BOX
                                || base->type == DJUI_BASE_TYPE_BIND_SURFACE;
     struct DjuiBase* host = NULL;
@@ -791,10 +791,8 @@ bool djui_modern_rect_override(struct DjuiBase* base) {
 
     const f32 explicitRadius = -1.0f;
 
-    if (base->type == DJUI_BASE_TYPE_SLIDER_TRACK) {
-        struct DjuiBase* fill = base_child_of_type(base, DJUI_BASE_TYPE_SLIDER_FILL);
-        if (fill == NULL) { return true; }
-
+    struct DjuiBase* fill = slider_fill(base);
+    if (fill != NULL) {
         f32 sliderBorderW = -1.0f;
         if (gDjuiModernConfig.showBorders) {
             sliderBorderW = frame_border_width(base);

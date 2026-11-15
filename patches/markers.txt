@@ -18,7 +18,7 @@
 13-djui_button.c.patch|src/pc/djui/djui_button.c|base->type = DJUI_BASE_TYPE_BUTTON;|any
 14-djui_checkbox.c.patch|src/pc/djui/djui_checkbox.c|base->type = DJUI_BASE_TYPE_CHECKBOX;|desktop
 14-djui_checkbox.c.android.patch|src/pc/djui/djui_checkbox.c|base->type = DJUI_BASE_TYPE_CHECKBOX;|android
-15-djui_slider.c.patch|src/pc/djui/djui_slider.c|base->type = DJUI_BASE_TYPE_SLIDER;|any
+15-djui_slider.c.patch|src/pc/djui/djui_slider.c|rectValue->base.type = DJUI_BASE_TYPE_SLIDER_FILL;|any
 16-djui_inputbox.c.patch|src/pc/djui/djui_inputbox.c|base->type = DJUI_BASE_TYPE_INPUTBOX;|any
 17-djui_selectionbox.c.patch|src/pc/djui/djui_selectionbox.c|base->type = DJUI_BASE_TYPE_SELECTIONBOX;|any
 18-djui_progress_bar.c.patch|src/pc/djui/djui_progress_bar.c|base->type = DJUI_BASE_TYPE_PROGRESS_BAR;|any
