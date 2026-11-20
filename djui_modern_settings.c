@@ -169,21 +169,26 @@ static void settings_detail_panel_create(void) {
     struct DjuiThreePanel* panel = djui_three_panel_create(&gDjuiRoot->base, 64, 800, 0);
     sDetailPanel = panel;
 
-    struct DjuiThreePanelTheme theme = gDjuiThemes[configDjuiTheme]->threePanels;
+    const struct DjuiModernPalette* palette = djui_modern_palette();
+    const struct DjuiModernUiColors* colors = djui_modern_ui_colors();
+    const struct DjuiColor panelColor = palette->panel;
+    const struct DjuiColor panelBorder = palette->panelBorder;
     djui_base_set_alignment(&panel->base, DJUI_HALIGN_RIGHT, DJUI_VALIGN_CENTER);
     djui_base_set_size_type(&panel->base, DJUI_SVT_ABSOLUTE, DJUI_SVT_RELATIVE);
     djui_base_set_size(&panel->base, SETTINGS_PANEL_WIDTH, 1.0f);
-    djui_base_set_color(&panel->base, theme.rectColor.r, theme.rectColor.g,
-                        theme.rectColor.b, theme.rectColor.a);
-    djui_base_set_border_color(&panel->base, theme.borderColor.r, theme.borderColor.g,
-                               theme.borderColor.b, theme.borderColor.a);
+    djui_base_set_color(&panel->base, panelColor.r, panelColor.g,
+                        panelColor.b, panelColor.a);
+    djui_base_set_border_color(&panel->base, panelBorder.r, panelBorder.g,
+                               panelBorder.b, panelBorder.a);
     djui_base_set_border_width(&panel->base, 8);
     djui_base_set_padding(&panel->base, 16, 16, 16, 16);
 
     sDetailTitle = djui_text_create(&panel->base, "");
     djui_base_set_size_type(&sDetailTitle->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
     djui_base_set_size(&sDetailTitle->base, 1.0f, 40);
-    djui_base_set_color(&sDetailTitle->base, 255, 255, 255, 255);
+    const struct DjuiColor titleColor = colors->detailTitle;
+    djui_base_set_color(&sDetailTitle->base, titleColor.r, titleColor.g,
+                        titleColor.b, titleColor.a);
     djui_text_set_alignment(sDetailTitle, DJUI_HALIGN_LEFT, DJUI_VALIGN_CENTER);
 
     sDetailText = djui_text_create(&panel->base, "");
@@ -191,9 +196,12 @@ static void settings_detail_panel_create(void) {
     djui_base_set_location(&sDetailText->base, 0, 48);
     djui_base_set_size_type(&sDetailText->base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);
     djui_base_set_size(&sDetailText->base, 1.0f, 0.86f);
-    djui_base_set_color(&sDetailText->base, 222, 222, 222, 255);
+    const struct DjuiColor textColor = colors->detailText;
+    djui_base_set_color(&sDetailText->base, textColor.r, textColor.g,
+                        textColor.b, textColor.a);
     djui_text_set_alignment(sDetailText, DJUI_HALIGN_LEFT, DJUI_VALIGN_TOP);
-    djui_text_set_drop_shadow(sDetailText, 64, 64, 64, 100);
+    const struct DjuiColor shadow = colors->textShadow;
+    djui_text_set_drop_shadow(sDetailText, shadow.r, shadow.g, shadow.b, shadow.a);
 }
 
 static void settings_checkbox_value_changed(struct DjuiBase* caller) {
@@ -273,7 +281,9 @@ static void settings_row_create(struct DjuiBase* list, size_t index) {
             struct DjuiText* text = djui_text_create(list, label);
             djui_base_set_size_type(&text->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
             djui_base_set_size(&text->base, 1.0f, 32);
-            djui_base_set_color(&text->base, 220, 220, 220, 255);
+            const struct DjuiColor textColor = djui_modern_ui_colors()->detailText;
+            djui_base_set_color(&text->base, textColor.r, textColor.g,
+                                textColor.b, textColor.a);
 
             struct DjuiInputbox* input = djui_inputbox_create(list, DJUI_MODERN_FONT_PATH_MAX);
             djui_inputbox_set_text(input, sFontPath);
@@ -427,11 +437,9 @@ static void draft_load(void) {
 static void settings_set_status(const char* message, bool isError) {
     if (sStatusText == NULL) { return; }
     djui_text_set_text(sStatusText, message);
-    if (isError) {
-        djui_base_set_color(&sStatusText->base, 255, 100, 100, 255);
-    } else {
-        djui_base_set_color(&sStatusText->base, 255, 220, 100, 255);
-    }
+    const struct DjuiModernUiColors* colors = djui_modern_ui_colors();
+    const struct DjuiColor color = isError ? colors->statusError : colors->statusNotice;
+    djui_base_set_color(&sStatusText->base, color.r, color.g, color.b, color.a);
 }
 
 static bool draft_differs_from_runtime(void) {
@@ -475,6 +483,12 @@ static void settings_restore_defaults(struct DjuiBase* caller) {
     djui_inputbox_set_text(sFontPathInput, sFontPath);
     settings_refresh_controls();
     settings_show_restart_notice();
+}
+
+void djui_modern_settings_button_create(struct DjuiBase* parent) {
+    char label[64];
+    lang_copy(label, sizeof(label), "MENU_ENTRY");
+    djui_button_create(parent, label, DJUI_BUTTON_STYLE_NORMAL, djui_modern_settings_create);
 }
 
 void djui_modern_settings_create(struct DjuiBase* caller) {

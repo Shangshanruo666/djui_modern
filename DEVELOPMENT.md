@@ -73,7 +73,7 @@ sh src/pc/djui_modern/install.sh --no-submodule
 | `src/pc/djui/djui_base.h` | 增加 `DjuiBaseType` 枚举和类别字段 |
 | `src/pc/djui/djui_base.c` | 初始化节点类别 |
 | `src/pc/djui/djui_button.c` 等控件构造函数 | 写入控件和内部矩形类别 |
-| `src/pc/djui/djui_panel_menu_options.c` | 提供设置面板入口 |
+| `src/pc/djui/djui_panel_menu_options.c` | 调用设置面板入口钩子 |
 | `src/pc/gfx/gfx_dxgi.cpp` | 合并 Windows UTF-16 代理对并转换 UTF-8 |
 | `src/pc/gfx/gfx_pc.c` | 支持大尺寸 RGBA32 纹理上传 |
 
@@ -108,6 +108,7 @@ bool djui_modern_rect_override(struct DjuiBase* base) {
 
 ```text
 src/pc/djui_modern/
+├── djui_modern_colors.c          主题与控件颜色数据
 ├── djui_modern.c                 生命周期、主题、矩形接管
 ├── djui_modern_rrect.c           圆角轮廓、遮罩、边框、顶点池
 ├── djui_modern_font.c            DjuiFont 适配器和槽位安装
@@ -154,6 +155,11 @@ if (djui_modern_rect_override(base)) {
 通过宽高、颜色、父节点是否可交互或子节点数量推断控件类型。
 
 ### 主题处理
+
+`djui_modern_colors.c` 是五套原版主题和模块固定颜色的唯一数据源。控件背景、
+边框、文本和面板颜色不得在绘制模块中另写字面量。`djui_modern_control_colors()`
+按常态、悬停、按下和禁用状态返回一对颜色；返回按钮在常态和禁用状态分别使用
+原版的 0.6 和 0.3 明度倍率。
 
 `djui_modern_pre_render()` 遍历当前 DJUI 控件树，将控件颜色映射为以下方案：
 

@@ -15,6 +15,7 @@ Lua 接口仍由原版代码负责。
 
 | 路径 | 职责 |
 | --- | --- |
+| `djui_modern_colors.c` | 五套原版主题及模块固定颜色的唯一数据源 |
 | `djui_modern.c` | 生命周期、主题遍历、矩形接管、面板字体策略 |
 | `djui_modern_rrect.c` | 圆角轮廓、遮罩、顶点池和 display list |
 | `djui_modern_font.c` | `DjuiFont` 适配器和字体槽安装 |
@@ -84,8 +85,9 @@ Lua 接口仍由原版代码负责。
 | 字体适配 | `djui_modern_font_*` | 安装、查询和还原字体槽 |
 | 字体后端 | `djui_modern_font_atlas_*` | 光栅化、测量、纹理和字形输出 |
 | 圆角矩形 | `djui_modern_rrect_*` | 几何、遮罩、边框和 display list |
+| 调色板 | `djui_modern_palette` / `djui_modern_control_colors` | 主题颜色、交互状态和返回按钮颜色 |
 | 配置 | `djui_modern_config_load` / `djui_modern_config_read` / `djui_modern_config_save` | 启动配置、面板读取和保存 |
-| 设置面板 | `djui_modern_settings_create` | 生成控件并写入配置文件 |
+| 设置面板 | `djui_modern_settings_button_create` / `djui_modern_settings_create` | 创建本地化入口、生成控件并写入配置文件 |
 | 语言 | `djui_modern_lang_get` | 按当前游戏语言查询模块文本 |
 
 只有字体适配层可以修改 `gDjuiFonts`。主模块不直接访问字形纹理或字体表。
@@ -114,8 +116,9 @@ djui_modern.cfg
   -> 保存后提示重启
 ```
 
-`pre_render` 从当前 `DjuiTheme` 读取基础颜色。矩形最终颜色和不透明度仍来自
-`DjuiBase`，因此原版的淡出和交互状态继续生效。
+`pre_render` 通过 `djui_modern_colors.c` 查询当前主题。控件常态、悬停、按下和
+禁用色由同一接口返回，返回按钮沿用原版的 0.6 和 0.3 明度倍率。矩形最终
+不透明度仍以 `DjuiBase` 的原版 alpha 为基准。
 
 ## 上游补丁边界
 

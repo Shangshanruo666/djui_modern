@@ -5,6 +5,7 @@ struct DjuiModernLangEntry { const char* key; const char* value; };
 
 static const struct DjuiModernLangEntry sLang_Chinese[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "保存" },
     { "BACK", "返回" },
     { "RESTORE_DEFAULTS", "恢复默认" },
@@ -111,6 +112,7 @@ static const struct DjuiModernLangEntry sLang_Chinese[] = {
 
 static const struct DjuiModernLangEntry sLang_Czech[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "Uložit" },
     { "BACK", "Zpět" },
     { "RESTORE_DEFAULTS", "Obnovit výchozí" },
@@ -216,6 +218,7 @@ static const struct DjuiModernLangEntry sLang_Czech[] = {
 
 static const struct DjuiModernLangEntry sLang_Dutch[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "Save" },
     { "BACK", "Back" },
     { "RESTORE_DEFAULTS", "Restore Defaults" },
@@ -321,6 +324,7 @@ static const struct DjuiModernLangEntry sLang_Dutch[] = {
 
 static const struct DjuiModernLangEntry sLang_English[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "Save" },
     { "BACK", "Back" },
     { "RESTORE_DEFAULTS", "Restore Defaults" },
@@ -427,6 +431,7 @@ static const struct DjuiModernLangEntry sLang_English[] = {
 
 static const struct DjuiModernLangEntry sLang_French[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "Save" },
     { "BACK", "Back" },
     { "RESTORE_DEFAULTS", "Restore Defaults" },
@@ -532,6 +537,7 @@ static const struct DjuiModernLangEntry sLang_French[] = {
 
 static const struct DjuiModernLangEntry sLang_German[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "Save" },
     { "BACK", "Back" },
     { "RESTORE_DEFAULTS", "Restore Defaults" },
@@ -637,6 +643,7 @@ static const struct DjuiModernLangEntry sLang_German[] = {
 
 static const struct DjuiModernLangEntry sLang_Italian[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "Save" },
     { "BACK", "Back" },
     { "RESTORE_DEFAULTS", "Restore Defaults" },
@@ -742,6 +749,7 @@ static const struct DjuiModernLangEntry sLang_Italian[] = {
 
 static const struct DjuiModernLangEntry sLang_Japanese[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "保存" },
     { "BACK", "戻る" },
     { "RESTORE_DEFAULTS", "既定値に戻す" },
@@ -847,6 +855,7 @@ static const struct DjuiModernLangEntry sLang_Japanese[] = {
 
 static const struct DjuiModernLangEntry sLang_Polish[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "Save" },
     { "BACK", "Back" },
     { "RESTORE_DEFAULTS", "Restore Defaults" },
@@ -952,6 +961,7 @@ static const struct DjuiModernLangEntry sLang_Polish[] = {
 
 static const struct DjuiModernLangEntry sLang_Portuguese[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "Save" },
     { "BACK", "Back" },
     { "RESTORE_DEFAULTS", "Restore Defaults" },
@@ -1057,6 +1067,7 @@ static const struct DjuiModernLangEntry sLang_Portuguese[] = {
 
 static const struct DjuiModernLangEntry sLang_Russian[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "Save" },
     { "BACK", "Back" },
     { "RESTORE_DEFAULTS", "Restore Defaults" },
@@ -1162,6 +1173,7 @@ static const struct DjuiModernLangEntry sLang_Russian[] = {
 
 static const struct DjuiModernLangEntry sLang_Spanish[] = {
     { "TITLE", "DJUI MODERN" },
+    { "MENU_ENTRY", "djui_modern设置" },
     { "SAVE", "Save" },
     { "BACK", "Back" },
     { "RESTORE_DEFAULTS", "Restore Defaults" },
@@ -1268,16 +1280,16 @@ static const struct DjuiModernLangEntry sLang_Spanish[] = {
 struct DjuiModernLangTable { const char* name; const struct DjuiModernLangEntry* entries; unsigned int count; };
 
 static const struct DjuiModernLangTable sDjuiModernLangTables[] = {
-    { "Chinese", sLang_Chinese, 103u },
-    { "Czech", sLang_Czech, 102u },
-    { "Dutch", sLang_Dutch, 102u },
-    { "English", sLang_English, 103u },
-    { "French", sLang_French, 102u },
-    { "German", sLang_German, 102u },
-    { "Italian", sLang_Italian, 102u },
-    { "Japanese", sLang_Japanese, 102u },
-    { "Polish", sLang_Polish, 102u },
-    { "Portuguese", sLang_Portuguese, 102u },
-    { "Russian", sLang_Russian, 102u },
-    { "Spanish", sLang_Spanish, 102u },
+    { "Chinese", sLang_Chinese, 104u },
+    { "Czech", sLang_Czech, 103u },
+    { "Dutch", sLang_Dutch, 103u },
+    { "English", sLang_English, 104u },
+    { "French", sLang_French, 103u },
+    { "German", sLang_German, 103u },
+    { "Italian", sLang_Italian, 103u },
+    { "Japanese", sLang_Japanese, 103u },
+    { "Polish", sLang_Polish, 103u },
+    { "Portuguese", sLang_Portuguese, 103u },
+    { "Russian", sLang_Russian, 103u },
+    { "Spanish", sLang_Spanish, 103u },
 };

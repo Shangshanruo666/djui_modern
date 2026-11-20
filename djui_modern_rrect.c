@@ -4,6 +4,7 @@
 #include "djui_modern.h"
 #include "djui_modern_config.h"
 #include "djui_modern_rrect.h"
+#include "djui_modern.h"
 #include "djui_modern_gbi.h"   // gsSP2TrianglesDjui（模块私有，不改上游 gbi_extension.h）
 #include "pc/debuglog.h"
 #include "engine/math_util.h"
@@ -902,7 +903,7 @@ void djui_modern_rrect_draw_slider(struct DjuiBaseRect* clip,
 
     struct DjuiColor bc = borderColor;
     bc.a = (u8)(((s32)bc.a * alphaScale) / 255);
-    const struct DjuiColor none = { 0, 0, 0, 0 };
+    const struct DjuiColor none = djui_modern_ui_colors()->transparent;
     djui_modern_rrect_draw_framed(clip, track, radiusKind, explicitRadius, bw,
                                   bc, none, none, alphaScale);
 }
