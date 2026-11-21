@@ -271,7 +271,6 @@ def write_emoji_header(path, cps, blob, blob_kind, atlas_png, size, gx, gy,
         w("};\n\n")
         parts = write_atlas_parts(path, "sDjuiModernEmojiAtlas", blob)
         w(f"/* 图集：{blob_kind}，{len(blob)} 字节，按 {ATLAS_PART_BYTES} 字节分片。 */\n")
-        w("struct DjuiModernAtlasPart { const unsigned char* data; unsigned int size; };\n")
         for name, _size in parts:
             w(f"extern const unsigned char {name}[];\n")
         w("static const struct DjuiModernAtlasPart sDjuiModernEmojiAtlas[] = {\n")
@@ -320,7 +319,6 @@ def write_flag_header(path, flags, blob, blob_kind, atlas_png, size, gx, gy,
         w("};\n\n")
         parts = write_atlas_parts(path, "sDjuiModernFlagAtlas", blob)
         w(f"/* 国旗图集：{blob_kind}，{len(blob)} 字节，按 {ATLAS_PART_BYTES} 字节分片。 */\n")
-        w("struct DjuiModernAtlasPart { const unsigned char* data; unsigned int size; };\n")
         for name, _size in parts:
             w(f"extern const unsigned char {name}[];\n")
         w("static const struct DjuiModernAtlasPart sDjuiModernFlagAtlas[] = {\n")

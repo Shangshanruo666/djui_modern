@@ -12,11 +12,6 @@
 #define DJUI_MODERN_CJK_FONT_PRESENT 1
 #define DJUI_MODERN_CJK_FONT_NAME "SourceHanSansSC-Subset.otf"
 
-struct DjuiModernFontPart {
-    const unsigned char* data;
-    unsigned int size;
-};
-
 extern const unsigned char sDjuiModernCjkFont_part0[];
 extern const unsigned char sDjuiModernCjkFont_part1[];
 extern const unsigned char sDjuiModernCjkFont_part2[];

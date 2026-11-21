@@ -205,7 +205,9 @@ static void apply_scheme(struct DjuiBase* base, s32 idx) {
             if (srcA < 128) { bg.a = (u8)(bg.a / 2); }
             if (!enabled) { bg.a = (u8)(((s32)bg.a * 2) / 3); }
 
-            if (sThemedMap[idx].hasColor) {
+            if (sThemedMap[idx].hasColor
+                && enabled
+                && state == DJUI_MODERN_CONTROL_DEFAULT) {
                 bg.r = sThemedMap[idx].srcR;
                 bg.g = sThemedMap[idx].srcG;
                 bg.b = sThemedMap[idx].srcB;

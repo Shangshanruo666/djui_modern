@@ -12,11 +12,11 @@ static const struct DjuiModernPalette sPalettes[DJUI_THEME_MAX] = {
         .rect = { 236, 238, 242, 255 },
         .hoveredRect = { 242, 246, 251, 255 },
         .cursorDownRect = { 221, 232, 244, 255 },
-        .border = { 82, 82, 85, 255 },
-        .hoveredBorder = { 42, 124, 194, 255 },
-        .cursorDownBorder = { 34, 92, 151, 255 },
+        .border = { 75, 75, 75, 255 },
+        .hoveredBorder = { 0, 120, 215, 255 },
+        .cursorDownBorder = { 0, 84, 153, 255 },
         .panel = { 20, 24, 31, 224 },
-        .panelBorder = { 16, 18, 23, 192 },
+        .panelBorder = { 0, 0, 0, 200 },
     },
     [DJUI_THEME_DARK] = {
         .text = { 226, 226, 230, 255 },
@@ -24,11 +24,11 @@ static const struct DjuiModernPalette sPalettes[DJUI_THEME_MAX] = {
         .rect = { 46, 50, 58, 255 },
         .hoveredRect = { 82, 92, 108, 255 },
         .cursorDownRect = { 108, 120, 137, 255 },
-        .border = { 82, 84, 89, 255 },
-        .hoveredBorder = { 48, 128, 199, 255 },
-        .cursorDownBorder = { 36, 94, 151, 255 },
+        .border = { 75, 75, 75, 255 },
+        .hoveredBorder = { 0, 120, 215, 255 },
+        .cursorDownBorder = { 0, 84, 153, 255 },
         .panel = { 20, 24, 31, 226 },
-        .panelBorder = { 17, 20, 26, 196 },
+        .panelBorder = { 0, 0, 0, 200 },
     },
     [DJUI_THEME_FILE_SELECT] = {
         .text = { 18, 20, 18, 255 },
@@ -36,11 +36,11 @@ static const struct DjuiModernPalette sPalettes[DJUI_THEME_MAX] = {
         .rect = { 226, 234, 222, 255 },
         .hoveredRect = { 240, 246, 250, 255 },
         .cursorDownRect = { 218, 233, 244, 255 },
-        .border = { 80, 85, 80, 255 },
-        .hoveredBorder = { 44, 126, 195, 255 },
-        .cursorDownBorder = { 35, 96, 153, 255 },
+        .border = { 74, 79, 74, 255 },
+        .hoveredBorder = { 0, 120, 215, 255 },
+        .cursorDownBorder = { 0, 84, 153, 255 },
         .panel = { 222, 183, 65, 248 },
-        .panelBorder = { 188, 151, 56, 196 },
+        .panelBorder = { 182, 135, 8, 255 },
     },
     [DJUI_THEME_MARIO] = {
         .text = { 20, 18, 16, 255 },
@@ -48,11 +48,11 @@ static const struct DjuiModernPalette sPalettes[DJUI_THEME_MAX] = {
         .rect = { 246, 219, 79, 255 },
         .hoveredRect = { 241, 247, 251, 255 },
         .cursorDownRect = { 220, 233, 245, 255 },
-        .border = { 200, 169, 12, 255 },
-        .hoveredBorder = { 45, 127, 196, 255 },
-        .cursorDownBorder = { 36, 97, 154, 255 },
+        .border = { 196, 165, 0, 255 },
+        .hoveredBorder = { 0, 120, 215, 255 },
+        .cursorDownBorder = { 0, 84, 153, 255 },
         .panel = { 91, 126, 196, 228 },
-        .panelBorder = { 229, 111, 111, 196 },
+        .panelBorder = { 255, 82, 82, 200 },
     },
     [DJUI_THEME_ODYSSEY] = {
         .text = { 18, 17, 20, 255 },
@@ -60,11 +60,11 @@ static const struct DjuiModernPalette sPalettes[DJUI_THEME_MAX] = {
         .rect = { 247, 247, 249, 255 },
         .hoveredRect = { 241, 246, 251, 255 },
         .cursorDownRect = { 220, 233, 245, 255 },
-        .border = { 203, 203, 206, 255 },
-        .hoveredBorder = { 45, 126, 196, 255 },
-        .cursorDownBorder = { 35, 97, 155, 255 },
+        .border = { 200, 200, 200, 255 },
+        .hoveredBorder = { 0, 120, 215, 255 },
+        .cursorDownBorder = { 0, 84, 153, 255 },
         .panel = { 226, 55, 78, 198 },
-        .panelBorder = { 246, 235, 238, 188 },
+        .panelBorder = { 255, 255, 255, 200 },
     },
 };
 
@@ -145,11 +145,11 @@ struct DjuiModernControlColors djui_modern_control_colors(
             scale = 1.0f;
             break;
         case DJUI_MODERN_CONTROL_DISABLED:
-            scale = isBackButton ? (darkTheme ? 0.3f : 0.55f) : 0.6f;
+            scale = isBackButton ? (darkTheme ? 0.3f : 0.6f) : 0.6f;
             break;
         case DJUI_MODERN_CONTROL_DEFAULT:
         default:
-            scale = isBackButton ? (darkTheme ? 0.6f : 0.84f) : 1.0f;
+            scale = isBackButton ? (darkTheme ? 0.6f : 0.9f) : 1.0f;
             break;
     }
 

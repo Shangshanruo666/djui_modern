@@ -12,11 +12,6 @@
 #define DJUI_MODERN_LATIN_FONT_PRESENT 1
 #define DJUI_MODERN_LATIN_FONT_NAME "RobotoCondensed-Subset.ttf"
 
-struct DjuiModernFontPart {
-    const unsigned char* data;
-    unsigned int size;
-};
-
 extern const unsigned char sDjuiModernLatinFont_part0[];
 
 static const struct DjuiModernFontPart sDjuiModernLatinFont[] = {

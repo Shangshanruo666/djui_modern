@@ -5,6 +5,16 @@
 extern "C" {
 #endif
 
+struct DjuiModernFontPart {
+    const unsigned char* data;
+    unsigned int size;
+};
+
+struct DjuiModernAtlasPart {
+    const unsigned char* data;
+    unsigned int size;
+};
+
 /*
  * 矢量字形后端。
  * 字形按字符与屏幕字号分档光栅化，每个槽位对应一张不可变纹理。

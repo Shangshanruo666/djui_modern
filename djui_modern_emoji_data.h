@@ -49,7 +49,6 @@ static const unsigned int sDjuiModernEmojiCodepoints[] = {
 };
 
 /* 图集：PNG，371432 字节，按 524288 字节分片。 */
-struct DjuiModernAtlasPart { const unsigned char* data; unsigned int size; };
 extern const unsigned char sDjuiModernEmojiAtlas_part0[];
 static const struct DjuiModernAtlasPart sDjuiModernEmojiAtlas[] = {
     { sDjuiModernEmojiAtlas_part0, 371432u },

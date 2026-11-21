@@ -51,7 +51,6 @@ static const unsigned short sDjuiModernFlagKeys[] = {
 };
 
 /* 国旗图集：PNG，390386 字节，按 524288 字节分片。 */
-struct DjuiModernAtlasPart { const unsigned char* data; unsigned int size; };
 extern const unsigned char sDjuiModernFlagAtlas_part0[];
 static const struct DjuiModernAtlasPart sDjuiModernFlagAtlas[] = {
     { sDjuiModernFlagAtlas_part0, 390386u },

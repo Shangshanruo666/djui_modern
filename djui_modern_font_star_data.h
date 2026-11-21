@@ -12,11 +12,6 @@
 #define DJUI_MODERN_STAR_FONT_PRESENT 1
 #define DJUI_MODERN_STAR_FONT_NAME "Power Star.otf"
 
-struct DjuiModernFontPart {
-    const unsigned char* data;
-    unsigned int size;
-};
-
 extern const unsigned char sDjuiModernStarFont_part0[];
 
 static const struct DjuiModernFontPart sDjuiModernStarFont[] = {

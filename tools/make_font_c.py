@@ -102,11 +102,6 @@ def main() -> int:
         with open(part_path, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(lines))
 
-    header.append("struct DjuiModernFontPart {")
-    header.append("    const unsigned char* data;")
-    header.append("    unsigned int size;")
-    header.append("};")
-    header.append("")
     for part_name, part_size in part_names:
         header.append("extern const unsigned char %s[];" % part_name)
     header.append("")

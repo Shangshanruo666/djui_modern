@@ -126,9 +126,11 @@ Options menu
 ```
 
 `pre_render` reads the active theme from `djui_modern_colors.c`. One query
-returns default, hover, pressed, and disabled colors, with the original 0.6 and
-0.3 brightness scales for back buttons. Original `DjuiBase` alpha remains the
-basis for opacity.
+returns default, hover, pressed, and disabled colors. Borders retain their
+original theme colors, including the blue hover and pressed highlights. Dark
+theme back buttons keep the original 0.6 and 0.3 brightness scales; other
+themes use 0.9 and 0.6 so back buttons are only slightly darker than normal
+controls. Original `DjuiBase` alpha remains the basis for opacity.
 
 ## Upstream patch boundary
 
