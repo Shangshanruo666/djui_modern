@@ -16,6 +16,7 @@ static unsigned int sSliderValues[5];
 static unsigned int sPanelAlpha;
 static unsigned int sElementAlpha;
 static unsigned int sOverlayAlpha;
+static unsigned int sSliderAlpha;
 static unsigned int sFontCjkBoost;
 static unsigned int sTextScale;
 static unsigned int sEmojiChoice;
@@ -27,7 +28,7 @@ static struct DjuiText* sDetailText = NULL;
 static struct DjuiText* sDetailTitle = NULL;
 static struct DjuiThreePanel* sDetailPanel = NULL;
 static struct DjuiInputbox* sFontPathInput = NULL;
-static struct DjuiBase* sRowBase[24];
+static struct DjuiBase* sRowBase[25];
 static struct DjuiBase* sFontSlotBase[DJUI_MODERN_FONT_SLOT_COUNT];
 
 enum SliderField {
@@ -76,6 +77,7 @@ static const struct SettingRow kRows[] = {
     { "panel_alpha", "PANEL_ALPHA", SETTING_UINT, 0, 255, 0 },
     { "element_alpha", "ELEMENT_ALPHA", SETTING_UINT, 0, 255, 0 },
     { "overlay_alpha", "OVERLAY_ALPHA", SETTING_UINT, 0, 255, 0 },
+    { "slider_alpha", "SLIDER_ALPHA", SETTING_UINT, 0, 255, 0 },
     { "gradients", "GRADIENTS", SETTING_BOOL, 0, 0, 0 },
     { "gradient_top_boost", "GRADIENT_TOP", SETTING_FLOAT, 0.5f, 2.0f, 1 },
     { "gradient_bottom_scale", "GRADIENT_BOTTOM", SETTING_FLOAT, 0.5f, 2.0f, 1 },
@@ -169,26 +171,21 @@ static void settings_detail_panel_create(void) {
     struct DjuiThreePanel* panel = djui_three_panel_create(&gDjuiRoot->base, 64, 800, 0);
     sDetailPanel = panel;
 
-    const struct DjuiModernPalette* palette = djui_modern_palette();
-    const struct DjuiModernUiColors* colors = djui_modern_ui_colors();
-    const struct DjuiColor panelColor = palette->panel;
-    const struct DjuiColor panelBorder = palette->panelBorder;
+    struct DjuiThreePanelTheme theme = gDjuiThemes[configDjuiTheme]->threePanels;
     djui_base_set_alignment(&panel->base, DJUI_HALIGN_RIGHT, DJUI_VALIGN_CENTER);
     djui_base_set_size_type(&panel->base, DJUI_SVT_ABSOLUTE, DJUI_SVT_RELATIVE);
     djui_base_set_size(&panel->base, SETTINGS_PANEL_WIDTH, 1.0f);
-    djui_base_set_color(&panel->base, panelColor.r, panelColor.g,
-                        panelColor.b, panelColor.a);
-    djui_base_set_border_color(&panel->base, panelBorder.r, panelBorder.g,
-                               panelBorder.b, panelBorder.a);
+    djui_base_set_color(&panel->base, theme.rectColor.r, theme.rectColor.g,
+                        theme.rectColor.b, theme.rectColor.a);
+    djui_base_set_border_color(&panel->base, theme.borderColor.r, theme.borderColor.g,
+                               theme.borderColor.b, theme.borderColor.a);
     djui_base_set_border_width(&panel->base, 8);
     djui_base_set_padding(&panel->base, 16, 16, 16, 16);
 
     sDetailTitle = djui_text_create(&panel->base, "");
     djui_base_set_size_type(&sDetailTitle->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
     djui_base_set_size(&sDetailTitle->base, 1.0f, 40);
-    const struct DjuiColor titleColor = colors->detailTitle;
-    djui_base_set_color(&sDetailTitle->base, titleColor.r, titleColor.g,
-                        titleColor.b, titleColor.a);
+    djui_base_set_color(&sDetailTitle->base, 255, 255, 255, 255);
     djui_text_set_alignment(sDetailTitle, DJUI_HALIGN_LEFT, DJUI_VALIGN_CENTER);
 
     sDetailText = djui_text_create(&panel->base, "");
@@ -196,12 +193,9 @@ static void settings_detail_panel_create(void) {
     djui_base_set_location(&sDetailText->base, 0, 48);
     djui_base_set_size_type(&sDetailText->base, DJUI_SVT_RELATIVE, DJUI_SVT_RELATIVE);
     djui_base_set_size(&sDetailText->base, 1.0f, 0.86f);
-    const struct DjuiColor textColor = colors->detailText;
-    djui_base_set_color(&sDetailText->base, textColor.r, textColor.g,
-                        textColor.b, textColor.a);
+    djui_base_set_color(&sDetailText->base, 222, 222, 222, 255);
     djui_text_set_alignment(sDetailText, DJUI_HALIGN_LEFT, DJUI_VALIGN_TOP);
-    const struct DjuiColor shadow = colors->textShadow;
-    djui_text_set_drop_shadow(sDetailText, shadow.r, shadow.g, shadow.b, shadow.a);
+    djui_text_set_drop_shadow(sDetailText, 64, 64, 64, 100);
 }
 
 static void settings_checkbox_value_changed(struct DjuiBase* caller) {
@@ -258,32 +252,34 @@ static void settings_row_create(struct DjuiBase* list, size_t index) {
                                        NULL)->base;
             break;
         case 7:
+            base = &djui_slider_create(list, label, &sSliderAlpha, 0, 255,
+                                       NULL)->base;
+            break;
+        case 8:
             base = &djui_checkbox_create(list, label, &sDraft.gradients,
                                          settings_checkbox_value_changed)->base;
             break;
-        case 8:
+        case 9:
             base = &djui_slider_create(list, label, &sSliderValues[SLIDER_GRADIENT_TOP],
                                        50, 200, NULL)->base;
             break;
-        case 9:
+        case 10:
             base = &djui_slider_create(list, label, &sSliderValues[SLIDER_GRADIENT_BOTTOM],
                                        50, 200, NULL)->base;
             break;
-        case 10:
+        case 11:
             base = &djui_checkbox_create(list, label, &sDraft.showBorders,
                                          settings_checkbox_value_changed)->base;
             break;
-        case 11:
+        case 12:
             base = &djui_checkbox_create(list, label, &sDraft.fontEnabled,
                                          settings_checkbox_value_changed)->base;
             break;
-        case 12: {
+        case 13: {
             struct DjuiText* text = djui_text_create(list, label);
             djui_base_set_size_type(&text->base, DJUI_SVT_RELATIVE, DJUI_SVT_ABSOLUTE);
             djui_base_set_size(&text->base, 1.0f, 32);
-            const struct DjuiColor textColor = djui_modern_ui_colors()->detailText;
-            djui_base_set_color(&text->base, textColor.r, textColor.g,
-                                textColor.b, textColor.a);
+            djui_base_set_color(&text->base, 220, 220, 220, 255);
 
             struct DjuiInputbox* input = djui_inputbox_create(list, DJUI_MODERN_FONT_PATH_MAX);
             djui_inputbox_set_text(input, sFontPath);
@@ -291,23 +287,23 @@ static void settings_row_create(struct DjuiBase* list, size_t index) {
             base = &input->base;
             break;
         }
-        case 13:
+        case 14:
             base = &djui_slider_create(list, label, &sFontCjkBoost, 50, 200,
                                        NULL)->base;
             break;
-        case 14:
+        case 15:
             base = &djui_checkbox_create(list, label, &sDraft.fontBilinear,
                                          settings_checkbox_value_changed)->base;
             break;
-        case 15:
+        case 16:
             base = &djui_checkbox_create(list, label, &sDraft.fontNativeMetrics,
                                          settings_checkbox_value_changed)->base;
             break;
-        case 16:
+        case 17:
             base = &djui_checkbox_create(list, label, &sDraft.fontFallbackKerning,
                                          settings_checkbox_value_changed)->base;
             break;
-        case 17:
+        case 18:
             for (u8 slot = 0; slot < DJUI_MODERN_FONT_SLOT_COUNT; slot++) {
                 struct DjuiCheckbox* checkbox = djui_checkbox_create(
                     list, kFontSlotLabels[slot], &sFontSlots[slot],
@@ -318,7 +314,7 @@ static void settings_row_create(struct DjuiBase* list, size_t index) {
                                              setting_detail_hide);
             }
             return;
-        case 18: {
+        case 19: {
             char* choices[2];
             choices[0] = djui_modern_lang_get("EMOJI_MODERN");
             choices[1] = djui_modern_lang_get("EMOJI_VANILLA");
@@ -328,19 +324,19 @@ static void settings_row_create(struct DjuiBase* list, size_t index) {
             free(choices[1]);
             break;
         }
-        case 19:
+        case 20:
             base = &djui_slider_create(list, label, &sTextScale, 50, 200,
                                        NULL)->base;
             break;
-        case 20:
+        case 21:
             base = &djui_checkbox_create(list, label, &sDraft.fontPlayerList,
                                          settings_checkbox_value_changed)->base;
             break;
-        case 21:
+        case 22:
             base = &djui_checkbox_create(list, label, &sDraft.fontModDescription,
                                          settings_checkbox_value_changed)->base;
             break;
-        case 22:
+        case 23:
             base = &djui_checkbox_create(list, label, &sDraft.showStats,
                                          settings_checkbox_value_changed)->base;
             break;
@@ -389,6 +385,7 @@ static void draft_to_controls(void) {
     sPanelAlpha = sDraft.panelAlpha;
     sElementAlpha = sDraft.elementAlpha;
     sOverlayAlpha = sDraft.overlayAlpha;
+    sSliderAlpha = sDraft.sliderAlpha;
     sEmojiChoice = sDraft.emojiModern ? 0 : 1;
     snprintf(sFontPath, sizeof(sFontPath), "%s", sDraft.fontPath);
     memset(sFontSlots, 0, sizeof(sFontSlots));
@@ -410,6 +407,7 @@ static void draft_from_controls(void) {
     sDraft.panelAlpha = (u8)sPanelAlpha;
     sDraft.elementAlpha = (u8)sElementAlpha;
     sDraft.overlayAlpha = (u8)sOverlayAlpha;
+    sDraft.sliderAlpha = (u8)sSliderAlpha;
     sDraft.emojiModern = (sEmojiChoice == 0);
     snprintf(sDraft.fontPath, sizeof(sDraft.fontPath), "%s", sFontPath);
     sDraft.fontSlotCount = 0;
@@ -437,9 +435,11 @@ static void draft_load(void) {
 static void settings_set_status(const char* message, bool isError) {
     if (sStatusText == NULL) { return; }
     djui_text_set_text(sStatusText, message);
-    const struct DjuiModernUiColors* colors = djui_modern_ui_colors();
-    const struct DjuiColor color = isError ? colors->statusError : colors->statusNotice;
-    djui_base_set_color(&sStatusText->base, color.r, color.g, color.b, color.a);
+    if (isError) {
+        djui_base_set_color(&sStatusText->base, 255, 100, 100, 255);
+    } else {
+        djui_base_set_color(&sStatusText->base, 255, 220, 100, 255);
+    }
 }
 
 static bool draft_differs_from_runtime(void) {

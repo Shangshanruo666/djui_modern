@@ -24,6 +24,7 @@ void djui_modern_config_set_defaults(struct DjuiModernConfig* cfg) {
     cfg->panelAlpha = 244;
     cfg->elementAlpha = 208;
     cfg->overlayAlpha = 176;
+    cfg->sliderAlpha = 208;
 
     cfg->gradients = true;
     cfg->gradientTopBoost = 1.18f;
@@ -101,6 +102,8 @@ static void apply_kv(struct DjuiModernConfig* cfg, const char* key, const char* 
         cfg->elementAlpha = (u8)clamp((s32)atoi(value), 0, 255);
     } else if (!strcasecmp(key, "overlay_alpha")) {
         cfg->overlayAlpha = (u8)clamp((s32)atoi(value), 0, 255);
+    } else if (!strcasecmp(key, "slider_alpha")) {
+        cfg->sliderAlpha = (u8)clamp((s32)atoi(value), 0, 255);
     } else if (!strcasecmp(key, "gradients")) {
         cfg->gradients = parse_bool(value, cfg->gradients);
     } else if (!strcasecmp(key, "gradient_top_boost")) {
@@ -205,7 +208,8 @@ static const char kDefaultCfgText[] =
 "# ---------------- 半透明 ----------------\n"
 "panel_alpha   = 244     # 面板背景不透明度 0-255\n"
 "element_alpha = 208     # 控件背景不透明度\n"
-"overlay_alpha = 176     # 覆盖层（聊天栏底、弹窗遮罩）不透明度\n"
+"overlay_alpha = 176     # Mod菜单中Mod条目和玩家列表中玩家条目背景的不透明度\n"
+"slider_alpha  = 208     # 滑条填充不透明度\n"
 "\n"
 "# ---------------- 渐变 ----------------\n"
 "# 在当前颜色的基础上做上亮下暗的渐变。\n"
@@ -525,6 +529,8 @@ static void cfg_values_from_struct(const struct DjuiModernConfig* cfg) {
     cfg_value_set("element_alpha", buf);
     snprintf(buf, sizeof(buf), "%u", (unsigned)cfg->overlayAlpha);
     cfg_value_set("overlay_alpha", buf);
+    snprintf(buf, sizeof(buf), "%u", (unsigned)cfg->sliderAlpha);
+    cfg_value_set("slider_alpha", buf);
 
     cfg_value_set("gradients", cfg->gradients ? "true" : "false");
     snprintf(buf, sizeof(buf), "%.2f", cfg->gradientTopBoost);

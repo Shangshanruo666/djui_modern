@@ -120,7 +120,7 @@ slider, with the `1 = 0.01` conversion shown in the description panel.
 | `corner_roundness` | `0.90` | Corner transition shape |
 | `panel_alpha` | `244` | Panel opacity |
 | `element_alpha` | `208` | Control opacity |
-| `overlay_alpha` | `176` | Overlay opacity |
+| `overlay_alpha` | `176` | Opacity of Mod entries in the Mod menu and player entry backgrounds in the player list |
 | `gradients` | `true` | Enable subtle gradients |
 | `show_borders` | `true` | Draw rounded borders |
 | `font_enabled` | `true` | Enable vector fonts |

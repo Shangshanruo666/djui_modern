@@ -18,6 +18,7 @@ struct DjuiModernConfig {
     u8    panelAlpha;
     u8    elementAlpha;
     u8    overlayAlpha;
+    u8    sliderAlpha;
 
     bool  gradients;
     f32   gradientTopBoost;

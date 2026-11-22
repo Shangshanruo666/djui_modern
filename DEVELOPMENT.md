@@ -108,7 +108,6 @@ bool djui_modern_rect_override(struct DjuiBase* base) {
 
 ```text
 src/pc/djui_modern/
-├── djui_modern_colors.c          主题与控件颜色数据
 ├── djui_modern.c                 生命周期、主题、矩形接管
 ├── djui_modern_rrect.c           圆角轮廓、遮罩、边框、顶点池
 ├── djui_modern_font.c            DjuiFont 适配器和槽位安装
@@ -156,11 +155,8 @@ if (djui_modern_rect_override(base)) {
 
 ### 主题处理
 
-`djui_modern_colors.c` 是五套原版主题和模块固定颜色的唯一数据源。控件背景、
-边框、文本和面板颜色不得在绘制模块中另写字面量。`djui_modern_control_colors()`
-按常态、悬停、按下和禁用状态返回一对颜色。常态、悬停和按下边框保持原版
-主题色。深色主题的返回按钮在常态和禁用状态分别使用原版的 0.6 和 0.3 明度
-倍率；其他主题分别使用 0.9 和 0.6。活动状态下不得恢复登记时的自定义底色。
+模块不维护主题调色板。`pre_render` 只保存原版 alpha，并按设置重新缩放 alpha；
+RGB 与边框颜色始终沿用原版写入的数据，悬停和按下高亮也由原版状态逻辑决定。
 
 `djui_modern_pre_render()` 遍历当前 DJUI 控件树，将控件颜色映射为以下方案：
 
@@ -320,7 +316,7 @@ UTF-8 发送给 DJUI。`djui_unicode_accepts()` 放行模块图集支持的 Emoj
 | `corner_roundness` | `0.90` | 圆角过渡形状，范围 0 到 1 |
 | `panel_alpha` | `244` | 面板不透明度 |
 | `element_alpha` | `208` | 控件不透明度 |
-| `overlay_alpha` | `176` | 覆层不透明度 |
+| `overlay_alpha` | `176` | Mod菜单中Mod条目和玩家列表中玩家条目背景的不透明度 |
 | `gradients` | `true` | 是否使用轻微渐变 |
 | `gradient_top_boost` | `1.18` | 顶部亮度倍率 |
 | `gradient_bottom_scale` | `0.86` | 底部亮度倍率 |

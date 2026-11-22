@@ -13,6 +13,12 @@
 
 static bool sEnabled = false;
 
+static bool color_is_neutral(struct DjuiColor color) {
+    const s32 maximum = max(max((s32)color.r, (s32)color.g), (s32)color.b);
+    const s32 minimum = min(min((s32)color.r, (s32)color.g), (s32)color.b);
+    return (maximum - minimum) <= 8;
+}
+
 static bool base_is_checkbox_part(struct DjuiBase* base) {
     return base != NULL
         && (base->type == DJUI_BASE_TYPE_CHECKBOX_FRAME
@@ -80,6 +86,7 @@ enum ThemeScheme {
     SCHEME_PANEL,
     SCHEME_SECTION,
     SCHEME_TINTED,
+    SCHEME_SLIDER_FILL,
     SCHEME_PANEL_ALPHA,
 };
 
@@ -89,10 +96,7 @@ static struct {
     struct DjuiBase* parent;
     u8   scheme;
     u8   srcAlpha;
-    u8   srcR, srcG, srcB;
     u8   lastWrittenAlpha;
-    bool hasColor;
-    bool srcGradient;
     bool seen;
 } sThemedMap[DJUI_MODERN_MAX_THEMED];
 static u32 sThemedCount = 0;
@@ -107,8 +111,7 @@ static s32 themed_index_of(struct DjuiBase* base) {
 }
 
 static s32 themed_register(struct DjuiBase* base, s32 scheme,
-                           struct DjuiColor srcColor, f32 srcAlphaHint,
-                           bool hasColor) {
+                           f32 srcAlphaHint) {
     if (base == NULL) { return -1; }
     const s32 found = themed_index_of(base);
     if (found >= 0) {
@@ -130,11 +133,6 @@ static s32 themed_register(struct DjuiBase* base, s32 scheme,
     sThemedMap[idx].parent = base->parent;
     sThemedMap[idx].scheme = (u8)scheme;
     sThemedMap[idx].srcAlpha = (u8)clamp((s32)srcAlphaHint, 0, 255);
-    sThemedMap[idx].srcR = srcColor.r;
-    sThemedMap[idx].srcG = srcColor.g;
-    sThemedMap[idx].srcB = srcColor.b;
-    sThemedMap[idx].hasColor = hasColor;
-    sThemedMap[idx].srcGradient = base->gradient;
     sThemedMap[idx].lastWrittenAlpha = (u8)clamp((s32)srcAlphaHint, 0, 255);
     sThemedMap[idx].seen = true;
     return idx;
@@ -158,12 +156,6 @@ static bool native_alpha_changed(struct DjuiBase* base, s32 idx) {
 }
 
 
-static bool base_is_back_button(struct DjuiBase* host) {
-    return host != NULL
-        && host->type == DJUI_BASE_TYPE_BUTTON
-        && ((struct DjuiButton*)host)->style == DJUI_BUTTON_STYLE_BACK;
-}
-
 static void apply_scheme(struct DjuiBase* base, s32 idx) {
     if (base == NULL || idx < 0 || idx >= (s32)sThemedCount) { return; }
     const s32 scheme = sThemedMap[idx].scheme;
@@ -186,69 +178,33 @@ static void apply_scheme(struct DjuiBase* base, s32 idx) {
     switch (scheme) {
         case SCHEME_ELEM: {
             const bool enabled = (host != NULL) ? (host->interactable->enabled && host->enabled) : true;
-            enum DjuiModernControlState state = DJUI_MODERN_CONTROL_DEFAULT;
-            if (!enabled) {
-                state = DJUI_MODERN_CONTROL_DISABLED;
-            } else if (host == gDjuiCursorDownOn || host == gInteractableFocus) {
-                state = DJUI_MODERN_CONTROL_CURSOR_DOWN;
-            } else if (host == gDjuiHovered) {
-                state = DJUI_MODERN_CONTROL_HOVERED;
-            }
-
-            const struct DjuiModernControlColors colors =
-                djui_modern_control_colors(state, base_is_back_button(host));
-            struct DjuiColor bg = colors.rect;
-            bg = djui_modern_tint_color(bg);
             const u8 srcA = sThemedMap[idx].srcAlpha;
-            bg.a = (u8)(((s32)srcA * gDjuiModernConfig.elementAlpha) / 255);
+            base->color.a = (u8)(((s32)srcA * gDjuiModernConfig.elementAlpha) / 255);
 
-            if (srcA < 128) { bg.a = (u8)(bg.a / 2); }
-            if (!enabled) { bg.a = (u8)(((s32)bg.a * 2) / 3); }
-
-            if (sThemedMap[idx].hasColor
-                && enabled
-                && state == DJUI_MODERN_CONTROL_DEFAULT) {
-                bg.r = sThemedMap[idx].srcR;
-                bg.g = sThemedMap[idx].srcG;
-                bg.b = sThemedMap[idx].srcB;
-            }
-            base->color = bg;
-            if (host != NULL) { host->borderColor = colors.border; }
+            if (srcA < 128) { base->color.a = (u8)(base->color.a / 2); }
+            if (!enabled) { base->color.a = (u8)(((s32)base->color.a * 2) / 3); }
         } break;
 
         case SCHEME_OVERLAY: {
             const s32 scaled = ((s32)gDjuiModernConfig.overlayAlpha * (s32)sThemedMap[idx].srcAlpha) / OVERLAY_ALPHA_REF;
-            base->color = djui_modern_ui_colors()->overlay;
             base->color.a = (u8)clamp(scaled, 0, 255);
-            base->gradient = gDjuiModernConfig.gradients;
         } break;
 
         case SCHEME_PANEL: {
-            struct DjuiColor bg = djui_modern_panel_color(djui_modern_palette()->panel);
-            bg.a = gDjuiModernConfig.panelAlpha;
-            base->color = bg;
-            base->gradient = gDjuiModernConfig.gradients;
+            base->color.a = gDjuiModernConfig.panelAlpha;
         } break;
 
         case SCHEME_SECTION: {
             const u8 srcA = sThemedMap[idx].srcAlpha;
-            struct DjuiColor bg;
-            bg.r = sThemedMap[idx].srcR;
-            bg.g = sThemedMap[idx].srcG;
-            bg.b = sThemedMap[idx].srcB;
-            bg = djui_modern_tint_color(bg);
-            bg.a = (u8)(((s32)srcA * gDjuiModernConfig.panelAlpha) / 255);
-            base->color = bg;
-            base->gradient = gDjuiModernConfig.gradients;
+            base->color.a = (u8)(((s32)srcA * gDjuiModernConfig.panelAlpha) / 255);
         } break;
 
         case SCHEME_TINTED: {
-            struct DjuiColor bg;
-            bg.r = sThemedMap[idx].srcR;
-            bg.g = sThemedMap[idx].srcG;
-            bg.b = sThemedMap[idx].srcB;
-            bg.a = (u8)(((s32)sThemedMap[idx].srcAlpha * gDjuiModernConfig.elementAlpha) / 255);
-            base->color = bg;
+            base->color.a = (u8)(((s32)sThemedMap[idx].srcAlpha * gDjuiModernConfig.elementAlpha) / 255);
+        } break;
+
+        case SCHEME_SLIDER_FILL: {
+            base->color.a = (u8)(((s32)sThemedMap[idx].srcAlpha * gDjuiModernConfig.sliderAlpha) / 255);
         } break;
 
         case SCHEME_PANEL_ALPHA: {
@@ -260,6 +216,7 @@ static void apply_scheme(struct DjuiBase* base, s32 idx) {
     }
 
     sThemedMap[idx].lastWrittenAlpha = base->color.a;
+    base->gradient = gDjuiModernConfig.gradients;
 }
 
 static void apply_theme(struct DjuiBase* base, bool fillContainer) {
@@ -273,7 +230,7 @@ static void apply_theme(struct DjuiBase* base, bool fillContainer) {
             return;
         }
         if (base->color.a == 0) { return; }
-        const s32 idx = themed_register(base, SCHEME_PANEL_ALPHA, base->color, (f32)base->color.a, false);
+        const s32 idx = themed_register(base, SCHEME_PANEL_ALPHA, (f32)base->color.a);
         if (idx >= 0) { apply_scheme(base, idx); }
         return;
     }
@@ -281,18 +238,27 @@ static void apply_theme(struct DjuiBase* base, bool fillContainer) {
     if (base_is_checkbox_part(base)) {
         const s32 idx = themed_index_of(base);
         if (idx >= 0 && sThemedMap[idx].scheme != SCHEME_NONE) {
-            base->color.r = sThemedMap[idx].srcR;
-            base->color.g = sThemedMap[idx].srcG;
-            base->color.b = sThemedMap[idx].srcB;
             base->color.a = sThemedMap[idx].srcAlpha;
-            base->gradient = sThemedMap[idx].srcGradient;
             sThemedMap[idx].scheme = SCHEME_NONE;
         }
         return;
     }
 
+    if (base->type == DJUI_BASE_TYPE_SLIDER_FILL) {
+        const s32 idx = themed_index_of(base);
+        if (idx >= 0) {
+            sThemedMap[idx].seen = true;
+            apply_scheme(base, idx);
+            return;
+        }
+        if (base->color.a != 0) {
+            const s32 created = themed_register(base, SCHEME_SLIDER_FILL, (f32)base->color.a);
+            if (created >= 0) { apply_scheme(base, created); }
+        }
+        return;
+    }
+
     const bool isControlSurface = base->type == DJUI_BASE_TYPE_BUTTON_SURFACE
-                               || slider_fill(base) != NULL
                                || base->type == DJUI_BASE_TYPE_SELECTIONBOX_BOX
                                || base->type == DJUI_BASE_TYPE_BIND_SURFACE;
     struct DjuiBase* host = NULL;
@@ -323,26 +289,24 @@ static void apply_theme(struct DjuiBase* base, bool fillContainer) {
     if (cur.a == 0) { return; }
 
     if (host != NULL) {
-        const bool hasColor =
-            !djui_modern_is_neutral_color(cur) && !djui_modern_is_theme_control_color(cur);
-        const s32 idx = themed_register(base, SCHEME_ELEM, cur, (f32)cur.a, hasColor);
+        const s32 idx = themed_register(base, SCHEME_ELEM, (f32)cur.a);
         if (idx >= 0) { apply_scheme(base, idx); }
         return;
     }
 
-    if (djui_modern_is_neutral_color(cur)) {
+    if (color_is_neutral(cur)) {
         if (cur.r < 40 && cur.g < 40 && cur.b < 40) {
             const s32 scheme = (cur.a <= 200) ? SCHEME_OVERLAY : SCHEME_PANEL;
-            const s32 idx = themed_register(base, scheme, cur, (f32)cur.a, false);
+            const s32 idx = themed_register(base, scheme, (f32)cur.a);
             if (idx >= 0) { apply_scheme(base, idx); }
         } else {
-            const s32 idx = themed_register(base, SCHEME_SECTION, cur, (f32)cur.a, false);
+            const s32 idx = themed_register(base, SCHEME_SECTION, (f32)cur.a);
             if (idx >= 0) { apply_scheme(base, idx); }
         }
         return;
     }
 
-    const s32 idx = themed_register(base, SCHEME_TINTED, cur, (f32)cur.a, true);
+    const s32 idx = themed_register(base, SCHEME_TINTED, (f32)cur.a);
     if (idx >= 0) { apply_scheme(base, idx); }
 }
 
@@ -659,7 +623,7 @@ bool djui_modern_rect_override(struct DjuiBase* base) {
     if (!hasFill) {
         const f32 bw = frame_border_width(base);
         if (gDjuiModernConfig.showBorders && bw > 0.0f && base->borderColor.a > 0) {
-            const struct DjuiColor none = djui_modern_ui_colors()->transparent;
+            const struct DjuiColor none = { 0, 0, 0, 0 };
             djui_modern_rrect_draw_framed(clip, &draw, radius, explicitRadius, bw,
                                           base->borderColor, none, none, 255);
         }
@@ -701,7 +665,7 @@ bool djui_modern_rect_override(struct DjuiBase* base) {
         const f32 shadowRadius = hasBorder
             ? djui_modern_rrect_outer_radius(&draw, radius, explicitRadius, hostBorderW)
             : explicitRadius;
-        const struct DjuiColor shadowCol = djui_modern_ui_colors()->panelShadow;
+        const struct DjuiColor shadowCol = { 0, 0, 0, 56 };
         djui_modern_rrect_draw(clip, &shadow, radius, shadowRadius, shadowCol, shadowCol, 255);
     }
 

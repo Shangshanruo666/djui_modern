@@ -112,7 +112,7 @@ make
 | `corner_roundness` | `0.90` | 圆角过渡形状 |
 | `panel_alpha` | `244` | 面板不透明度 |
 | `element_alpha` | `208` | 控件不透明度 |
-| `overlay_alpha` | `176` | 浮层不透明度 |
+| `overlay_alpha` | `176` | Mod菜单中Mod条目和玩家列表中玩家条目背景的不透明度 |
 | `gradients` | `true` | 是否启用轻微渐变 |
 | `show_borders` | `true` | 是否绘制圆角边框 |
 | `font_enabled` | `true` | 是否启用矢量字体 |

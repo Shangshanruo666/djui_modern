@@ -17,7 +17,6 @@ and `DjuiBase.type` control-category metadata.
 
 | Path | Responsibility |
 | --- | --- |
-| `djui_modern_colors.c` | Single source for the five upstream themes and module colors |
 | `djui_modern.c` | Lifecycle, theme pass, rectangle takeover, panel font policy |
 | `djui_modern_rrect.c` | Rounded outlines, mask, vertex pool, display lists |
 | `djui_modern_font.c` | `DjuiFont` adapters and font-slot installation |
@@ -93,7 +92,6 @@ No hook declarations are added to upstream headers.
 | Font adapter | `djui_modern_font_*` | Install, query, and restore font slots |
 | Font backend | `djui_modern_font_atlas_*` | Rasterization, metrics, textures, glyph output |
 | Rounded rectangles | `djui_modern_rrect_*` | Geometry, mask, borders, display lists |
-| Palette | `djui_modern_palette` / `djui_modern_control_colors` | Theme, interaction-state, and back-button colors |
 | Configuration | `djui_modern_config_load` / `djui_modern_config_read` / `djui_modern_config_save` | Startup load, panel read, and save |
 | Settings panel | `djui_modern_settings_button_create` / `djui_modern_settings_create` | Create the localized entry, controls, and write the configuration file |
 | Localization | `djui_modern_lang_get` | Look up module text in the active game language |
@@ -125,12 +123,9 @@ Options menu
   -> request a restart after saving
 ```
 
-`pre_render` reads the active theme from `djui_modern_colors.c`. One query
-returns default, hover, pressed, and disabled colors. Borders retain their
-original theme colors, including the blue hover and pressed highlights. Dark
-theme back buttons keep the original 0.6 and 0.3 brightness scales; other
-themes use 0.9 and 0.6 so back buttons are only slightly darker than normal
-controls. Original `DjuiBase` alpha remains the basis for opacity.
+`pre_render` only adjusts `DjuiBase.color.a` and never changes RGB. Fill colors,
+borders, hover highlights, and pressed highlights remain exactly as written by
+the original DJUI code. Module settings control opacity and gradients only.
 
 ## Upstream patch boundary
 

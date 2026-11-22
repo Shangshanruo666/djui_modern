@@ -15,7 +15,6 @@ Lua 接口仍由原版代码负责。
 
 | 路径 | 职责 |
 | --- | --- |
-| `djui_modern_colors.c` | 五套原版主题及模块固定颜色的唯一数据源 |
 | `djui_modern.c` | 生命周期、主题遍历、矩形接管、面板字体策略 |
 | `djui_modern_rrect.c` | 圆角轮廓、遮罩、顶点池和 display list |
 | `djui_modern_font.c` | `DjuiFont` 适配器和字体槽安装 |
@@ -85,7 +84,6 @@ Lua 接口仍由原版代码负责。
 | 字体适配 | `djui_modern_font_*` | 安装、查询和还原字体槽 |
 | 字体后端 | `djui_modern_font_atlas_*` | 光栅化、测量、纹理和字形输出 |
 | 圆角矩形 | `djui_modern_rrect_*` | 几何、遮罩、边框和 display list |
-| 调色板 | `djui_modern_palette` / `djui_modern_control_colors` | 主题颜色、交互状态和返回按钮颜色 |
 | 配置 | `djui_modern_config_load` / `djui_modern_config_read` / `djui_modern_config_save` | 启动配置、面板读取和保存 |
 | 设置面板 | `djui_modern_settings_button_create` / `djui_modern_settings_create` | 创建本地化入口、生成控件并写入配置文件 |
 | 语言 | `djui_modern_lang_get` | 按当前游戏语言查询模块文本 |
@@ -116,11 +114,8 @@ djui_modern.cfg
   -> 保存后提示重启
 ```
 
-`pre_render` 通过 `djui_modern_colors.c` 查询当前主题。控件常态、悬停、按下和
-禁用色由同一接口返回。常态、悬停和按下的边框保持原版主题色，包括悬停与
-按下状态的蓝色高亮。深色主题的返回按钮沿用原版 0.6 和 0.3 明度倍率；
-其他主题的常态和禁用状态分别使用 0.9 和 0.6，使返回按钮只比普通按钮略暗。
-矩形最终不透明度仍以 `DjuiBase` 的原版 alpha 为基准。
+`pre_render` 只调整 `DjuiBase.color.a`，不改写 RGB。控件底色、边框颜色、悬停与
+按下高亮全部沿用原版写入的数据；模块配置仅控制不透明度和渐变。
 
 ## 上游补丁边界
 
